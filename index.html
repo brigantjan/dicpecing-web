@@ -920,80 +920,10 @@ function dt(n){const d=new Date();d.setDate(d.getDate()+n);return d.toISOString(
 const T=dt(0);
 function ts(n){return dt(n)+'T'+(8+Math.floor(Math.random()*9)).toString().padStart(2,'0')+':'+('0'+Math.floor(Math.random()*59)).slice(-2)+':00';}
 
-let MOCK_OBJ=[
-  // uzavreté – zelené
-  {id_obj:"1-2240501",meno:"Adamec Ján",adresa:"Žilina, Hurbanova 15",typ:"M",balik:"M2",prijatia:dt(-60),plan:dt(-55),real:dt(-55),lt:dt(-50),zdroj:"Weiss Martin",add_txt:"",pozn:"",farba:"zelena",zmeneny:ts(-55)},
-  {id_obj:"1-2240502",meno:"Behúlová Anna",adresa:"Žilina, Závodská 8",typ:"O",balik:"O2",prijatia:dt(-58),plan:dt(-52),real:dt(-52),lt:dt(-48),zdroj:"Hrubý Jozef",add_txt:"",pozn:"",farba:"zelena",zmeneny:ts(-52)},
-  {id_obj:"1-2240503",meno:"Cibulka Martin",adresa:"Bytča, SNP 3",typ:"M",balik:"M3",prijatia:dt(-55),plan:dt(-49),real:dt(-49),lt:dt(-45),zdroj:"Kováč Peter",add_txt:"",pozn:"",farba:"zelena",zmeneny:ts(-49)},
-  {id_obj:"1-2240504",meno:"Drobná Lucia",adresa:"KNM, Oslobodenia 22",typ:"O",balik:"O1",prijatia:dt(-52),plan:dt(-46),real:dt(-46),lt:dt(-42),zdroj:"Šimko Milan",add_txt:"",pozn:"Zákazníčka neskoro doma – dohadovať ráno",farba:"zelena",zmeneny:ts(-46)},
-  {id_obj:"1-2240505",meno:"Eliáš Peter",adresa:"Čadca, Palárikova 10",typ:"E",balik:"O3",prijatia:dt(-50),plan:dt(-44),real:dt(-44),lt:dt(-39),zdroj:"Bača Ľubomír",add_txt:"",pozn:"",farba:"zelena",zmeneny:ts(-44)},
-  {id_obj:"1-2240506",meno:"Furman Igor",adresa:"Martin, Hostihora 18",typ:"M",balik:"M1",prijatia:dt(-48),plan:dt(-42),real:dt(-42),lt:dt(-37),zdroj:"Filo Tomáš",add_txt:"",pozn:"",farba:"zelena",zmeneny:ts(-42)},
-  {id_obj:"1-2240507",meno:"Gajdošová Marta",adresa:"Ružomberok, Podhora 7",typ:"O",balik:"O2",prijatia:dt(-46),plan:dt(-40),real:dt(-40),lt:dt(-35),zdroj:"Mináč Dušan",add_txt:"",pozn:"",farba:"zelena",zmeneny:ts(-40)},
-  {id_obj:"1-2240508",meno:"Horváth Tibor",adresa:"Žilina, Javorová 9",typ:"SAT",balik:"SAT",prijatia:dt(-44),plan:dt(-38),real:dt(-38),lt:dt(-33),zdroj:"Polák Igor",add_txt:"",pozn:"",farba:"zelena",zmeneny:ts(-38)},
-  {id_obj:"1-2240509",meno:"Ingr Rudolf",adresa:"Kysucké NM, Fraňa Kráľa 4",typ:"M",balik:"M2",prijatia:dt(-42),plan:dt(-36),real:dt(-36),lt:dt(-31),zdroj:"Weiss Martin",add_txt:"",pozn:"",farba:"zelena",zmeneny:ts(-36)},
-  {id_obj:"1-2240510",meno:"Jakubík Slavomír",adresa:"Považská B., Kasárenská 11",typ:"O",balik:"O3",prijatia:dt(-40),plan:dt(-34),real:dt(-34),lt:dt(-29),zdroj:"Hrubý Jozef",add_txt:"",pozn:"",farba:"zelena",zmeneny:ts(-34)},
-  // stornované – žlté
-  {id_obj:"1-2240511",meno:"Klčová Eva",adresa:"Žilina, Nám. Ľ. Štúra 2",typ:"M",balik:"M2",prijatia:dt(-38),plan:dt(-32),real:dt(-32),lt:dt(-27),zdroj:"Kováč Peter",add_txt:"",pozn:"Storno – zákazník zrušil zmluvu",farba:"zlta",zmeneny:ts(-32)},
-  {id_obj:"1-2240512",meno:"Lalinský Dušan",adresa:"Bytča, Štefánikova 5",typ:"O",balik:"O1",prijatia:dt(-36),plan:dt(-30),real:dt(-30),lt:dt(-25),zdroj:"Šimko Milan",add_txt:"",pozn:"Storno – zmena adresy",farba:"zlta",zmeneny:ts(-30)},
-  {id_obj:"1-2240513",meno:"Mináčová Soňa",adresa:"Martin, Záturčianska 3",typ:"SAT",balik:"SAT",prijatia:dt(-34),plan:dt(-28),real:dt(-28),lt:dt(-23),zdroj:"Bača Ľubomír",add_txt:"",pozn:"Storno – technicky nerealizovateľné",farba:"zlta",zmeneny:ts(-28)},
-  // prerezerv – modré
-  {id_obj:"1-2240514",meno:"Novák Stanislav",adresa:"Žilina, Nová 33",typ:"M",balik:"M2",prijatia:dt(-30),plan:dt(8),real:"",lt:dt(3),zdroj:"Weiss Martin",add_txt:"A",pozn:"REZ01",farba:"modra",zmeneny:ts(-30)},
-  {id_obj:"1-2240515",meno:"Oravec Branislav",adresa:"PoB., Stred 14",typ:"O",balik:"O2",prijatia:dt(-28),plan:dt(10),real:"",lt:dt(4),zdroj:"Hrubý Jozef",add_txt:"A",pozn:"REZ01",farba:"modra",zmeneny:ts(-28)},
-  {id_obj:"1-2240516",meno:"Polakovič René",adresa:"Čadca, Rázusova 6",typ:"M",balik:"M3",prijatia:dt(-26),plan:dt(12),real:"",lt:dt(5),zdroj:"Šimko Milan",add_txt:"A",pozn:"REZ02",farba:"modra",zmeneny:ts(-26)},
-  {id_obj:"1-2240517",meno:"Rajniaková Jana",adresa:"Žilina, Nám. Andreja Hlinku 1",typ:"M",balik:"M1",prijatia:dt(-24),plan:dt(14),real:"",lt:dt(6),zdroj:"Kováč Peter",add_txt:"A",pozn:"REZ01",farba:"modra",zmeneny:ts(-24)},
-  {id_obj:"1-2240518",meno:"Slabej Oto",adresa:"Martin, Turčianska 7",typ:"O",balik:"O3",prijatia:dt(-22),plan:dt(16),real:"",lt:dt(7),zdroj:"Mináč Dušan",add_txt:"A",pozn:"REZ01 Email odoslaný",farba:"modra",zmeneny:ts(-22)},
-  // aktívne plánované – biele (no farba)
-  {id_obj:"1-2240519",meno:"Takáč Vladimír",adresa:"Žilina, Tajovského 3",typ:"M",balik:"M2",prijatia:dt(-20),plan:dt(1),real:"",lt:dt(8),zdroj:"Weiss Martin",add_txt:"",pozn:"",farba:"",zmeneny:ts(-20)},
-  {id_obj:"1-2240520",meno:"Urbanec Ľubomír",adresa:"Bytča, Ul. SNP 8",typ:"O",balik:"O1",prijatia:dt(-19),plan:dt(2),real:"",lt:dt(9),zdroj:"Hrubý Jozef",add_txt:"",pozn:"",farba:"",zmeneny:ts(-19)},
-  {id_obj:"1-2240521",meno:"Vaculík Ján",adresa:"Žilina, Fatranská 12",typ:"M",balik:"M3",prijatia:dt(-18),plan:dt(2),real:"",lt:dt(10),zdroj:"Kováč Peter",add_txt:"",pozn:"Chce termín ráno",farba:"",zmeneny:ts(-18)},
-  {id_obj:"1-2240522",meno:"Weis Karol",adresa:"Ružomberok, Mostová 2",typ:"E",balik:"O2",prijatia:dt(-17),plan:dt(3),real:"",lt:dt(11),zdroj:"Filo Tomáš",add_txt:"",pozn:"",farba:"",zmeneny:ts(-17)},
-  {id_obj:"1-2240523",meno:"Zahradník Juraj",adresa:"Martin, Pribinova 5",typ:"M",balik:"M2",prijatia:dt(-16),plan:dt(3),real:"",lt:dt(12),zdroj:"Šimko Milan",add_txt:"",pozn:"",farba:"",zmeneny:ts(-16)},
-  {id_obj:"1-2240524",meno:"Ábelová Renáta",adresa:"Žilina, Predmestská 7",typ:"O",balik:"O1",prijatia:dt(-15),plan:dt(4),real:"",lt:dt(13),zdroj:"Weiss Martin",add_txt:"",pozn:"",farba:"",zmeneny:ts(-15)},
-  {id_obj:"1-2240525",meno:"Babčanová Tereza",adresa:"Čadca, Bodinova 9",typ:"SAT",balik:"SAT",prijatia:dt(-14),plan:dt(4),real:"",lt:dt(14),zdroj:"Bača Ľubomír",add_txt:"",pozn:"",farba:"",zmeneny:ts(-14)},
-  {id_obj:"1-2240526",meno:"Cibuliak Marián",adresa:"Žilina, Oravská 33",typ:"M",balik:"M2",prijatia:dt(-13),plan:dt(5),real:"",lt:dt(15),zdroj:"Mináč Dušan",add_txt:"",pozn:"",farba:"",zmeneny:ts(-13)},
-  {id_obj:"1-2240527",meno:"Doleželová Hana",adresa:"KNM, Nábrežná 11",typ:"O",balik:"O2",prijatia:dt(-12),plan:dt(5),real:"",lt:dt(16),zdroj:"Polák Igor",add_txt:"",pozn:"",farba:"",zmeneny:ts(-12)},
-  {id_obj:"1-2240528",meno:"Ertl Ondrej",adresa:"Žilina, Hlboká cesta 4",typ:"M",balik:"M1",prijatia:dt(-11),plan:dt(6),real:"",lt:dt(17),zdroj:"Weiss Martin",add_txt:"",pozn:"",farba:"",zmeneny:ts(-11)},
-  {id_obj:"1-2240529",meno:"Filipová Zuzana",adresa:"Martin, Záturčianska 15",typ:"O",balik:"O3",prijatia:dt(-10),plan:dt(6),real:"",lt:dt(18),zdroj:"Hrubý Jozef",add_txt:"",pozn:"",farba:"",zmeneny:ts(-10)},
-  {id_obj:"1-2240530",meno:"Gaborík Dávid",adresa:"Žilina, Veľká okružná 20",typ:"E",balik:"O2",prijatia:dt(-9),plan:dt(7),real:"",lt:dt(19),zdroj:"Kováč Peter",add_txt:"",pozn:"Optika",farba:"",zmeneny:ts(-9)},
-  {id_obj:"1-2240531",meno:"Holová Monika",adresa:"Ružomberok, Riadok 12",typ:"M",balik:"M2",prijatia:dt(-9),plan:dt(7),real:"",lt:dt(19),zdroj:"Šimko Milan",add_txt:"",pozn:"",farba:"",zmeneny:ts(-9)},
-  {id_obj:"1-2240532",meno:"Ilenič Rastislav",adresa:"Bytča, Ul. A. Hlinku 2",typ:"O",balik:"O1",prijatia:dt(-8),plan:dt(8),real:"",lt:dt(20),zdroj:"Bača Ľubomír",add_txt:"",pozn:"",farba:"",zmeneny:ts(-8)},
-  {id_obj:"1-2240533",meno:"Jančo Ľubomír",adresa:"Čadca, Palárikova 1",typ:"M",balik:"M3",prijatia:dt(-7),plan:dt(8),real:"",lt:dt(21),zdroj:"Filo Tomáš",add_txt:"",pozn:"",farba:"",zmeneny:ts(-7)},
-  {id_obj:"1-2240534",meno:"Kubík Pavel",adresa:"Žilina, Hollého 5",typ:"SAT",balik:"SAT",prijatia:dt(-7),plan:dt(9),real:"",lt:dt(21),zdroj:"Mináč Dušan",add_txt:"",pozn:"",farba:"",zmeneny:ts(-7)},
-  {id_obj:"1-2240535",meno:"Labudová Petra",adresa:"Martin, Hostihora 3",typ:"O",balik:"O2",prijatia:dt(-6),plan:dt(9),real:"",lt:dt(22),zdroj:"Polák Igor",add_txt:"",pozn:"",farba:"",zmeneny:ts(-6)},
-  {id_obj:"1-2240536",meno:"Machálka Ivan",adresa:"Žilina, Budatínska 4",typ:"M",balik:"M2",prijatia:dt(-6),plan:dt(10),real:"",lt:dt(22),zdroj:"Weiss Martin",add_txt:"",pozn:"",farba:"",zmeneny:ts(-6)},
-  {id_obj:"1-2240537",meno:"Nováková Helena",adresa:"Žilina, Hôrky 8",typ:"M",balik:"M1",prijatia:dt(-5),plan:dt(10),real:"",lt:dt(23),zdroj:"Hrubý Jozef",add_txt:"",pozn:"",farba:"",zmeneny:ts(-5)},
-  // Oneskorené = plán minul, stále bez realizácie  
-  {id_obj:"1-2240538",meno:"Ondrušek Marek",adresa:"Bytča, Závodná 7",typ:"O",balik:"O2",prijatia:dt(-25),plan:dt(-3),real:"",lt:dt(2),zdroj:"Kováč Peter",add_txt:"",pozn:"",farba:"",zmeneny:ts(-25)},
-  {id_obj:"1-2240539",meno:"Papánková Iveta",adresa:"Žilina, Malá okružná 1",typ:"M",balik:"M2",prijatia:dt(-23),plan:dt(-2),real:"",lt:dt(3),zdroj:"Šimko Milan",add_txt:"",pozn:"Nezastihnuteľná",farba:"",zmeneny:ts(-23)},
-  // Nenaplánované
-  {id_obj:"1-2240540",meno:"Raškovič Jozef",adresa:"Žilina, Závodská cesta 2",typ:"M",balik:"M2",prijatia:dt(-5),plan:"",real:"",lt:dt(8),zdroj:"",add_txt:"",pozn:"Čaká na potvrdenie",farba:"",zmeneny:ts(-5)},
-  {id_obj:"1-2240541",meno:"Súkeník Dalibor",adresa:"Martin, Pribinova 3",typ:"O",balik:"O1",prijatia:dt(-4),plan:"",real:"",lt:dt(9),zdroj:"",add_txt:"",pozn:"",farba:"",zmeneny:ts(-4)},
-  {id_obj:"1-2240542",meno:"Ťahlíková Simona",adresa:"Bytča, Komenského 6",typ:"M",balik:"M3",prijatia:dt(-3),plan:"",real:"",lt:dt(10),zdroj:"",add_txt:"",pozn:"",farba:"",zmeneny:ts(-3)},
-  {id_obj:"1-2240543",meno:"Uhríková Dana",adresa:"Ružomberok, Ul. Štefánik 2",typ:"SAT",balik:"SAT",prijatia:dt(-3),plan:"",real:"",lt:dt(11),zdroj:"",add_txt:"",pozn:"",farba:"",zmeneny:ts(-3)},
-  {id_obj:"1-2240544",meno:"Vargová Marta",adresa:"KNM, Osvald. partizánov 9",typ:"O",balik:"O2",prijatia:dt(-2),plan:"",real:"",lt:dt(12),zdroj:"",add_txt:"A",pozn:"",farba:"",zmeneny:ts(-2)},
-  {id_obj:"1-2240545",meno:"Wagnerová Petra",adresa:"Čadca, Fr. Kráľa 7",typ:"M",balik:"M1",prijatia:dt(-1),plan:"",real:"",lt:dt(13),zdroj:"",add_txt:"",pozn:"",farba:"",zmeneny:ts(-1)},
-  {id_obj:"1-2240546",meno:"Zubajová Katarína",adresa:"Žilina, Hollého 11",typ:"E",balik:"O2",prijatia:dt(0),plan:"",real:"",lt:dt(14),zdroj:"",add_txt:"",pozn:"",farba:"",zmeneny:T+'T07:00:00'},
-  {id_obj:"1-2240547",meno:"Žurovec Milan",adresa:"Martin, Záturčianska 4",typ:"M",balik:"M2",prijatia:dt(0),plan:"",real:"",lt:dt(14),zdroj:"",add_txt:"",pozn:"",farba:"",zmeneny:T+'T07:30:00'},
-  // Dnešné plánované
-  {id_obj:"1-2240548",meno:"Absolon Rastislav",adresa:"Žilina, Nová 5",typ:"M",balik:"M2",prijatia:dt(-8),plan:T,real:"",lt:dt(6),zdroj:"Weiss Martin",add_txt:"",pozn:"",farba:"",zmeneny:ts(-8)},
-  {id_obj:"1-2240549",meno:"Baranová Ingrid",adresa:"Žilina, Veľká Okružná 3",typ:"O",balik:"O1",prijatia:dt(-8),plan:T,real:"",lt:dt(6),zdroj:"Hrubý Jozef",add_txt:"",pozn:"Ráno do 10h",farba:"",zmeneny:ts(-8)},
-  {id_obj:"1-2240550",meno:"Cagáň Viktor",adresa:"Bytča, Štefánikova 9",typ:"M",balik:"M3",prijatia:dt(-7),plan:T,real:T,lt:dt(7),zdroj:"Kováč Peter",add_txt:"",pozn:"",farba:"zelena",zmeneny:T+'T08:15:00'},
-];
+let MOCK_OBJ=[]; // načítané z API
 
 // Notifikácie (technikmi zmenené objednávky)
-let NOTIF=[
-  {id:"n1",od:"Peter Kováč",id_obj:"1-2240550",typ:"uzavretie",text:"Peter Kováč uzavrel objednávku 1-2240550 (Cagáň Viktor)",cas:T+'T08:15:00',precitana:false},
-  {id:"n2",od:"Šimko Milan",id_obj:"1-2240523",typ:"poznamka",text:"Šimko Milan pridala poznámku k 1-2240523: zákazník bude doma po 14h",cas:T+'T09:30:00',precitana:false},
-  {id:"n3",od:"Bača Ľubomír",id_obj:"1-2240525",typ:"storno",text:"Bača Ľubomír stornoval objednávku 1-2240525 (Babčanová Tereza) – dôvod: choroba",cas:dt(-1)+'T16:00:00',precitana:true},
-];
-
-// MWF fronta
-let mwfQueue=[
-  {id_objednavky:"1-2240601",meno:"Ács Patrik",adresa:"Žilina, Mariánska 3",typ:"M",balik:"M2",datum_prijatia:T,lt:dt(14),termin_d:dt(12),add:"",telefon:"0901234567",mail_uid:"u1"},
-  {id_objednavky:"1-2240602",meno:"Barošová Erika",adresa:"Bytča, SNP 8",typ:"O",balik:"O1",datum_prijatia:T,lt:dt(13),termin_d:dt(11),add:"",telefon:"0912345678",mail_uid:"u2"},
-  {id_objednavky:"1-2240603",meno:"Čičmanec Roman",adresa:"Martin, Záturčianska 4",typ:"M",balik:"M3",datum_prijatia:T,lt:dt(10),termin_d:dt(8),add:"A",telefon:"0934567890",mail_uid:"u3"},
-  {id_objednavky:"1-2240519",meno:"Takáč Vladimír",adresa:"Žilina, Tajovského 3",typ:"M",balik:"M2",datum_prijatia:T,lt:dt(8),termin_d:dt(6),add:"",telefon:"",mail_uid:"u4",_is_dup:true},
-];
+let NOTIF=[]; // načítané z API
 let mwfActiveItem=null;
 
 // ════════════════════════════════════════════════════════════
@@ -1107,9 +1037,9 @@ function doLogin(){
 
     if(user.rola==='technik'){
       document.body.setAttribute('data-role','technik');
-      document.querySelector('.sidebar').setAttribute('style','display:none');
-      document.querySelector('.tabbar').setAttribute('style','display:none');
-      document.getElementById('statusbar').setAttribute('style','display:none');
+      document.querySelector('.sidebar')?.setAttribute('style','display:none');
+      document.querySelector('.tabbar')?.setAttribute('style','display:none');
+      document.getElementById('statusbar')?.setAttribute('style','display:none');
     } else {
       document.body.removeAttribute('data-role');
     }
