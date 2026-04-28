@@ -805,7 +805,12 @@ function startPolling(){
       if(activeTab===2)showPlan();
       if(activeTab===3)showPrerezerv();
       if(activeTab===4)showNeplan();
-      if(activeTab===5)renderMobil();
+      if(activeTab===5){
+        // Neprekresľuj mobil ak technik píše do inputu/textarey
+        const active=document.activeElement;
+        const typing=active&&(active.tagName==='INPUT'||active.tagName==='TEXTAREA');
+        if(!typing) renderMobil();
+      }
       updateDash();renderRecent();renderCapTbl(T,dt(9));renderPrCapTbl(T,dt(9));
       // Notifikácie každý 2. cyklus pre technika, každý cyklus pre ostatných
       const notifRows=await api('GET','/api/notifikacie');
