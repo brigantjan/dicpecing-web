@@ -1323,15 +1323,39 @@ function subSwitch(mode){
   document.getElementById('mwf-panel').classList.toggle('hidden',!a);
   document.getElementById('manual-panel').classList.toggle('hidden',a);
 }
-function mwfLoad(){
-  setStatus('Načítavam maily z MWF...','info');
-  const newItem={id_objednavky:"1-2240604",meno:"Ďurica Norbert",adresa:"Žilina, Rosínska 5",typ:"O",balik:"O2",datum_prijatia:T,lt:dt(15),termin_d:dt(13),add:"",telefon:"0944321456",mail_uid:"u5"};
-  if(!mwfQueue.find(i=>i.id_objednavky===newItem.id_objednavky)){
-    newItem._is_dup=!!MOCK_OBJ.find(o=>o.id_obj===newItem.id_objednavky);
-    mwfQueue.push(newItem);
+async function mwfLoad(){
+  setStatus('Načítavam maily z IMAP...','info');
+  try{
+    const mails=await api('GET','/api/imap/fetch');
+    let added=0;
+    mails.forEach(m=>{
+      if(mwfQueue.find(i=>i.mail_uid===m.mail_uid)) return;
+      const item={
+        id_objednavky: m.parsed?.id_obj||'',
+        meno:          m.parsed?.meno||'',
+        adresa:        m.parsed?.adresa||'',
+        typ:           m.parsed?.typ||'',
+        balik:         m.parsed?.balik||'',
+        datum_prijatia: T,
+        lt:            m.parsed?.lt||'',
+        termin_d:      '',
+        add:           '',
+        telefon:       '',
+        mail_uid:      m.mail_uid,
+        subject:       m.subject,
+        _is_dup:       !!MOCK_OBJ.find(o=>o.id_obj===m.parsed?.id_obj),
+        _no_parse:     !m.has_order,
+      };
+      mwfQueue.push(item);
+      added++;
+    });
+    renderMwfList();updateMwfBadge();
+    setStatus('IMAP: '+added+' nových mailov ('+mwfQueue.length+' celkom)','ok');
+    toast('↻ IMAP načítaný: '+added+' mailov');
+  }catch(e){
+    setStatus('IMAP chyba: '+e.message,'err');
+    toast('⚠ IMAP: '+e.message);
   }
-  renderMwfList();updateMwfBadge();
-  setStatus(`MWF: ${mwfQueue.length} čakajúcich`,'ok');toast('↻ MWF načítané');
 }
 function renderMwfList(){
   const el=document.getElementById('mwf-list');
