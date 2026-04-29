@@ -868,19 +868,7 @@ async function loadNotifikacie(){
     console.warn('Notifikácie:', e.message);
   }
 }
-let DEMO_USERS=[
-  {email:"admin@suptel.sk",    heslo:"Admin123!", meno:"Admin",             rola:"admin",     ini:"AD", technik_meno:"", imap_server:"posta.suptel.cz", imap_email:"", imap_heslo:""},
-  {email:"brigant@suptel.sk",  heslo:"Disp123!",  meno:"Ján Brigant",       rola:"dispečér",  ini:"JB", technik_meno:"", imap_server:"posta.suptel.cz", imap_email:"brigant@suptel.sk", imap_heslo:""},
-  {email:"pazdernikova@suptel.sk",heslo:"Disp123!",meno:"Jana Pazderníková",rola:"dispečér",  ini:"JP", technik_meno:"", imap_server:"posta.suptel.cz", imap_email:"pazdernikova@suptel.sk", imap_heslo:""},
-  {email:"baca@suptel.sk",     heslo:"Tech123!",  meno:"Bača Ľubomír",      rola:"technik",   ini:"BL", technik_meno:"Bača Ľubomír",  imap_server:"", imap_email:"", imap_heslo:""},
-  {email:"filo@suptel.sk",     heslo:"Tech123!",  meno:"Filo Tomáš",        rola:"technik",   ini:"FT", technik_meno:"Filo Tomáš",    imap_server:"", imap_email:"", imap_heslo:""},
-  {email:"kovac@suptel.sk",    heslo:"Tech123!",  meno:"Kováč Peter",       rola:"technik",   ini:"KP", technik_meno:"Kováč Peter",   imap_server:"", imap_email:"", imap_heslo:""},
-  {email:"simko@suptel.sk",    heslo:"Tech123!",  meno:"Šimko Milan",       rola:"technik",   ini:"SM", technik_meno:"Šimko Milan",   imap_server:"", imap_email:"", imap_heslo:""},
-  {email:"weiss@suptel.sk",    heslo:"Tech123!",  meno:"Weiss Martin",      rola:"technik",   ini:"WM", technik_meno:"Weiss Martin",  imap_server:"", imap_email:"", imap_heslo:""},
-  {email:"minacrola@suptel.sk",heslo:"Tech123!",  meno:"Mináč Dušan",       rola:"technik",   ini:"MD", technik_meno:"Mináč Dušan",   imap_server:"", imap_email:"", imap_heslo:""},
-  {email:"polak@suptel.sk",    heslo:"Tech123!",  meno:"Polák Igor",        rola:"technik",   ini:"PI", technik_meno:"Polák Igor",    imap_server:"", imap_email:"", imap_heslo:""},
-  {email:"operator@suptel.sk", heslo:"Oper123!",  meno:"Operátor",          rola:"operátor",  ini:"OP", technik_meno:"",  imap_server:"", imap_email:"", imap_heslo:""},
-];
+let DEMO_USERS=[]; // načítané z API
 let IMAP_CONFIG={server:"posta.suptel.cz",email:"",heslo:""};
 let currentUser=null;
 
