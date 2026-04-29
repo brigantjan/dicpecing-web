@@ -1205,8 +1205,22 @@ function initApp(){
   updateDash();
 }
 function fillTechDatalist(){
-  const dl=document.getElementById('dl-technik');
-  dl.innerHTML=TECHNICI.map(t=>`<option>${t}</option>`).join('');
+  // Technici = z API (TECHNICI) + unikátne hodnoty zo zdroj stĺpca objednávok
+  const dlT=document.getElementById('dl-technik');
+  const all=[...new Set([...TECHNICI,...MOCK_OBJ.map(o=>o.zdroj).filter(Boolean)])].sort();
+  dlT.innerHTML=all.map(t=>`<option>${t}</option>`).join('');
+  // Typy z objednávok
+  const dlTyp=document.getElementById('dl-typ');
+  if(dlTyp){
+    const typy=[...new Set(['M','O','E','SAT',...MOCK_OBJ.map(o=>o.typ).filter(Boolean)])].sort();
+    dlTyp.innerHTML=typy.map(v=>`<option>${v}</option>`).join('');
+  }
+  // Balíky z objednávok
+  const dlBal=document.getElementById('dl-balik');
+  if(dlBal){
+    const baliky=[...new Set(['M1','M2','M3','O1','O2','O3','SAT',...MOCK_OBJ.map(o=>o.balik).filter(Boolean)])].sort();
+    dlBal.innerHTML=baliky.map(v=>`<option>${v}</option>`).join('');
+  }
 }
 function fillFilterDropdowns(){
   ['f-typ'].forEach(id=>{
@@ -1382,14 +1396,21 @@ function mwfZapis(idx){
 function mwfVymaz(idx){
   const it=mwfQueue[idx];
   if(mwfActiveItem===it)mwfActiveItem=null;
+  // Označ mail ako prečítaný
+  if(it.mail_uid) api('POST','/api/imap/mark-read',{mail_uid:it.mail_uid}).catch(()=>{});
   mwfQueue.splice(idx,1);renderMwfList();updateMwfBadge();
   setStatus('MWF: objednávka vymazaná','info');
 }
 function mwfAfterZapisOk(){
   if(!mwfActiveItem)return;
+  const uid=mwfActiveItem.mail_uid;
   const idx=mwfQueue.indexOf(mwfActiveItem);
   if(idx>=0)mwfQueue.splice(idx,1);
   mwfActiveItem=null;renderMwfList();updateMwfBadge();
+  // Označ mail ako prečítaný
+  if(uid) api('POST','/api/imap/mark-read',{mail_uid:uid}).catch(()=>{});
+  // Obnov datalisty (nový technik/typ/balík mohol byť zapísaný)
+  fillTechDatalist();
 }
 
 // ════════════════════════════════════════════════════════════
@@ -1527,7 +1548,7 @@ function zapisObjednavku(){
   else MOCK_OBJ.push(novyZaznam);
   mwfAfterZapisOk();
   toast(`✓ Zapísaná: ${idObj}`);setStatus(`✓ Zapísaná: ${idObj}`,'ok');
-  vymazatFormu();renderRecent();renderCapTbl(T,dt(9));renderPrCapTbl(T,dt(9));updateDash();fillFilterDropdowns();
+  vymazatFormu();renderRecent();renderCapTbl(T,dt(9));renderPrCapTbl(T,dt(9));updateDash();fillFilterDropdowns();fillTechDatalist();
   // API volanie asynchrónne
   const apiData=mockToApi(novyZaznam);
   (dup ? api('PATCH',`/api/objednavky/${idObj}`, apiData)
