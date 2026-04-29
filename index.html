@@ -890,18 +890,20 @@ async function loadUsers(){
     if(rows&&rows.length){
       const rolaMap={'operator':'operátor','dispecer':'dispečér','admin':'admin','technik':'technik'};
       DEMO_USERS=rows.map(u=>({
-        _id:       u.id,
-        email:     u.email,
-        meno:      u.meno,
-        heslo:     '',  // nikdy neposielame heslo z API
-        rola:      rolaMap[u.rola]||u.rola,
-        ini:       u.ini||'',
+        _id:          u.id,
+        email:        u.email,
+        meno:         u.meno,
+        heslo:        '',  // nikdy neposielame heslo z API
+        rola:         rolaMap[u.rola]||u.rola,
+        ini:          u.ini||'',
         technik_meno: u.technik_meno||'',
         imap_server:  u.imap_server||'posta.suptel.cz',
         imap_email:   u.imap_email||'',
-        imap_heslo:   '',
+        imap_heslo:   u.imap_heslo||'',  // načítané z API pre admina
       }));
-      showPass=DEMO_USERS.map(()=>false);
+      // Zachovaj showPass pre existujúce záznamy, doplň nové
+      while(showPass.length<DEMO_USERS.length) showPass.push(false);
+      showPass.length=DEMO_USERS.length;
     }
   }catch(e){ console.warn('Users:', e.message); }
 }
@@ -2086,25 +2088,22 @@ function copyQrUrl(){
     const ta=document.createElement('textarea');ta.value=url;document.body.appendChild(ta);ta.select();document.execCommand('copy');document.body.removeChild(ta);toast('✓ URL skopírovaná');
   });
 }
-let showPass=DEMO_USERS.map(()=>false);
+let showPass=[];
 function togglePass(idx){showPass[idx]=!showPass[idx];renderUserTable();}
 function updateUser(idx,field,val){
+  if(idx>=DEMO_USERS.length) return;
   DEMO_USERS[idx][field]=val;
   if(field==='rola'||field==='technik_meno') renderUserTable();
-  // Auto-save na API ak má user _id
   const u=DEMO_USERS[idx];
-  if(!u._id) return; // nový user ešte nemá ID
-  const apiField={
-    'meno':'meno','email':'email','heslo':'heslo','rola':'rola',
-    'technik_meno':'technik_meno','ini':'ini',
-    'imap_server':'imap_server','imap_email':'imap_email','imap_heslo':'imap_heslo'
-  };
-  if(!apiField[field]) return;
-  // Rola – konvertuj späť na bez diakritiky pre API
+  if(!u._id){console.warn('updateUser: _id chýba pre idx',idx);return;}
   const rolaApiMap={'operátor':'operator','dispečér':'dispecer','admin':'admin','technik':'technik'};
   const payload={};
-  if(field==='rola') payload['rola']=rolaApiMap[val]||val;
-  else payload[apiField[field]]=val;
+  if(field==='heslo')      payload['heslo']=val;
+  else if(field==='rola')  payload['rola']=rolaApiMap[val]||val;
+  else if(['meno','email','technik_meno','ini','imap_server','imap_email','imap_heslo'].includes(field))
+    payload[field]=val;
+  else return; // neznáme pole
+  console.log('PATCH user',u._id, payload);
   api('PATCH',`/api/users/${u._id}`,payload)
     .then(()=>toast('✓ Uložené'))
     .catch(e=>toast('⚠ Chyba uloženia: '+e.message));
