@@ -640,6 +640,7 @@ body[data-role="technik"] #page5 { display:flex!important; flex-direction:column
       </table>
       <div style="font-size:11px;color:var(--muted);margin-top:10px">
         💡 IMAP prístup nastavujete pre každého Admin/Dispečéra zvlášť (zobrazí sa pod jeho riadkom). Port 993 · SSL · Server posta.suptel.cz
+        <br>🔒 Heslá do systému sú uložené zahashované – z bezpečnostných dôvodov sa nedajú zobraziť. Pre zmenu hesla vpíšte nové heslo do poľa "Nastavte nové heslo".
       </div>
     </div>
   </div>
@@ -2047,7 +2048,7 @@ function renderUserTable(){
       <td><input value="${u.email}" onchange="updateUser(${idx},'email',this.value)" style="min-width:160px"></td>
       <td>
         <div style="display:flex;gap:4px;align-items:center">
-          <input type="${showPass[idx]?'text':'password'}" value="${u.heslo}" onchange="updateUser(${idx},'heslo',this.value)" style="min-width:110px;font-family:var(--mono)">
+          <input type="${showPass[idx]?'text':'password'}" value="${u.heslo}" onchange="updateUser(${idx},'heslo',this.value)" style="min-width:110px;font-family:var(--mono)" placeholder="Nastavte nové heslo">
           <button class="btn btn-outline btn-xs" onclick="togglePass(${idx})" title="Zobraziť/skryť heslo">${showPass[idx]?'🙈':'👁'}</button>
         </div>
       </td>
