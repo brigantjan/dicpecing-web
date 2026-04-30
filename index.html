@@ -1331,32 +1331,43 @@ function subSwitch(mode){
 async function mwfLoad(){
   setStatus('Načítavam maily z IMAP...','info');
   try{
+    // Najprv zisti ktoré UID sú stále UNSEEN na serveri
+    const unseenResp=await api('GET','/api/imap/unseen-uids').catch(()=>({uids:[]}));
+    const unseenSet=new Set(unseenResp.uids||[]);
+
+    // Odstráň z fronty maily ktoré používateľ medzitým prečítal v Outlooku
+    const pred=mwfQueue.length;
+    mwfQueue=mwfQueue.filter(i=>!i.mail_uid||unseenSet.has(i.mail_uid));
+    const removed=pred-mwfQueue.length;
+
+    // Načítaj nové maily
     const mails=await api('GET','/api/imap/fetch');
     let added=0;
     mails.forEach(m=>{
       if(mwfQueue.find(i=>i.mail_uid===m.mail_uid)) return;
       const item={
-        id_objednavky: m.parsed?.id_obj||'',
-        meno:          m.parsed?.meno||'',
-        adresa:        m.parsed?.adresa||'',
-        typ:           m.parsed?.typ||'',
-        balik:         m.parsed?.balik||'',
-        datum_prijatia: T,
-        lt:            m.parsed?.lt||'',
-        termin_d:      '',
-        add:           '',
-        telefon:       '',
-        mail_uid:      m.mail_uid,
-        subject:       m.subject,
-        _is_dup:       !!MOCK_OBJ.find(o=>o.id_obj===m.parsed?.id_obj),
-        _no_parse:     !m.has_order,
+        id_objednavky:  m.parsed?.id_obj||'',
+        meno:           m.parsed?.meno||'',
+        adresa:         m.parsed?.adresa||'',
+        typ:            m.parsed?.typ||'',
+        balik:          m.parsed?.balik||'',
+        datum_prijatia: m.parsed?.datum_prijatia||T,  // dátum z mailu
+        lt:             m.parsed?.lt||'',
+        termin_d:       m.parsed?.datum_plan||'',
+        add:            m.parsed?.add_txt||'',
+        telefon:        m.parsed?.poznamky||'',
+        mail_uid:       m.mail_uid,
+        subject:        m.subject,
+        _is_dup:        !!MOCK_OBJ.find(o=>o.id_obj===m.parsed?.id_obj),
+        _no_parse:      !m.has_order,
       };
       mwfQueue.push(item);
       added++;
     });
     renderMwfList();updateMwfBadge();
-    setStatus('IMAP: '+added+' nových mailov ('+mwfQueue.length+' celkom)','ok');
-    toast('↻ IMAP načítaný: '+added+' mailov');
+    const msg='IMAP: '+added+' nových'+(removed?' · '+removed+' prečítaných odstránených':'');
+    setStatus(msg,'ok');
+    toast('↻ '+msg);
   }catch(e){
     setStatus('IMAP chyba: '+e.message,'err');
     toast('⚠ IMAP: '+e.message);
