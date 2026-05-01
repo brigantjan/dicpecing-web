@@ -863,7 +863,11 @@ function startPolling(){
         const typing=active&&(active.tagName==='INPUT'||active.tagName==='TEXTAREA');
         if(!typing) renderMobil();
       }
-      updateDash();renderRecent();renderCapTbl(T,dt(9));renderPrCapTbl(T,dt(9));
+      updateDash();renderRecent();
+      // Kapacita - zachovaj užívateľský výber dátumov
+      const cfv=document.getElementById('cap-from')?.value||T;
+      const ctv=document.getElementById('cap-to')?.value||dt(9);
+      renderCapTbl(cfv,ctv);renderPrCapTbl(cfv,ctv);
       // Notifikácie každý 2. cyklus pre technika, každý cyklus pre ostatných
       const notifRows=await api('GET','/api/notifikacie');
       const pred=NOTIF.length;
@@ -1324,7 +1328,7 @@ function updateDash(){
   const dnes=MOCK_OBJ.filter(o=>o.plan===T&&!o.real&&o.farba!=='zlta').length;
   const neplan=MOCK_OBJ.filter(isNeplan).length;
   const oneskor=MOCK_OBJ.filter(isOneskoren).length;
-  const prerez=MOCK_OBJ.filter(o=>o.add_txt==='A'&&o.plan&&o.lt&&o.plan>o.lt&&!o.real&&o.farba!=='zelena'&&o.farba!=='zlta').length;
+  const prerez=MOCK_OBJ.filter(o=>o.farba==='modra'&&!o.real).length;
   const notRead=NOTIF.filter(n=>!n.precitana).length;
   const celkom=MOCK_OBJ.filter(o=>!o.real&&o.farba!=='zlta').length;
   document.getElementById('dash-section').innerHTML=`
@@ -1634,7 +1638,11 @@ function zapisObjednavku(){
   else MOCK_OBJ.push(novyZaznam);
   mwfAfterZapisOk();
   toast(`✓ Zapísaná: ${idObj}`);setStatus(`✓ Zapísaná: ${idObj}`,'ok');
-  vymazatFormu();renderRecent();renderCapTbl(T,dt(9));renderPrCapTbl(T,dt(9));updateDash();fillFilterDropdowns();fillTechDatalist();
+  vymazatFormu();renderRecent();
+  const cfv2=document.getElementById('cap-from')?.value||T;
+  const ctv2=document.getElementById('cap-to')?.value||dt(9);
+  renderCapTbl(cfv2,ctv2);renderPrCapTbl(cfv2,ctv2);
+  updateDash();fillFilterDropdowns();fillTechDatalist();
   // API volanie asynchrónne
   const apiData=mockToApi(novyZaznam);
   (dup ? api('PATCH',`/api/objednavky/${idObj}`, apiData)
@@ -1722,7 +1730,7 @@ function renderPrCapTbl(f,t){
   const wrap=document.getElementById('pr-cap-wrap');
   const dates=getDates(f,t);
   const grid={};
-  MOCK_OBJ.forEach(o=>{if(o.add_txt!=='A'||!o.plan||!o.lt||o.plan<=o.lt||o.real||!o.zdroj)return;if(o.plan<f||o.plan>t)return;if(!grid[o.zdroj])grid[o.zdroj]={};if(!grid[o.zdroj][o.plan])grid[o.zdroj][o.plan]=[];if(o.adresa)grid[o.zdroj][o.plan].push(o.adresa);});
+  MOCK_OBJ.forEach(o=>{if(o.farba!=='modra'||o.real||!o.zdroj)return;if(!o.plan||o.plan<f||o.plan>t)return;if(!grid[o.zdroj])grid[o.zdroj]={};if(!grid[o.zdroj][o.plan])grid[o.zdroj][o.plan]=[];if(o.adresa)grid[o.zdroj][o.plan].push(o.adresa);});
   const techs=Object.keys(grid).sort();
   if(!techs.length){wrap.innerHTML='<div style="padding:10px;color:var(--muted);font-size:11px">Žiadne pre-rezervované.</div>';return;}
   let h=`<table class="cap-tbl"><thead><tr><th>Technik</th>`;
@@ -1894,7 +1902,11 @@ function showPlan(){
 let prChecked=new Set();
 function showPrerezerv(){
   prChecked.clear();
-  const rows=MOCK_OBJ.filter(o=>o.add_txt==='A'&&o.plan&&o.lt&&o.plan>o.lt&&!o.real&&o.farba!=='zelena'&&o.farba!=='zlta').sort((a,b)=>a.plan.localeCompare(b.plan));
+  // Zobrazí VŠETKY prerezerv. objednávky (farba=modra) bez realizácie
+  // Podmienka plan>lt nie je povinná - stačí farba=modra (dispečér ju nastavil manuálne)
+  const rows=MOCK_OBJ.filter(o=>
+    o.farba==='modra'&&!o.real&&o.farba!=='zlta'
+  ).sort((a,b)=>(a.plan||'').localeCompare(b.plan||''));
   document.getElementById('pr-sum').textContent=`Pre-rezervácií: ${rows.length}`;
   document.getElementById('pr-tbody').innerHTML=rows.map(o=>{
     const rm=o.pozn.match(/REZ\s*(\d{1,2})/);const rezStr=rm?`REZ${rm[1].padStart(2,'0')}`:'';
