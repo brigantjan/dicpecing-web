@@ -520,6 +520,8 @@ body[data-role="technik"] #page5 { display:flex!important; flex-direction:column
       <div class="quick-btn" id="qb-prerezerv" onclick="quickFilter('prerezerv')">Prerezerv.</div>
       <div class="quick-btn" id="qb-neplan" onclick="quickFilter('neplan')">Nenaplánované</div>
       <span class="sum-lbl ml-a" id="s-sum"></span>
+      <button class="btn btn-outline btn-xs" onclick="zobrazStatistiky()" style="padding:5px 10px;font-size:12px;white-space:nowrap">📊 Štatistiky</button>
+      <button class="btn btn-outline btn-xs" onclick="exportMesacnyVykaz()" style="padding:5px 10px;font-size:12px;white-space:nowrap">📋 Mesačný výkaz</button>
       <button class="btn btn-green btn-xs" onclick="exportExcel()" title="Exportovať zobrazené záznamy do Excelu" style="padding:5px 12px;font-size:12px;font-weight:600;white-space:nowrap">📥 Export Excel</button>
     </div>
     <!-- Stĺpcové filtre + tabuľka -->
@@ -528,8 +530,13 @@ body[data-role="technik"] #page5 { display:flex!important; flex-direction:column
         <thead>
           <tr>
             <th>ID objednávky</th><th>Meno zákazníka</th><th>Adresa</th>
-            <th>Typ</th><th>Balík</th><th>Prijatie</th><th>Realizácia</th>
-            <th>Plán</th><th>Technik</th><th>LT</th><th>Do/Po LT</th>
+            <th>Typ</th><th>Balík</th>
+            <th>Prijatie <span id="df-btn-prijatia" onclick="otvorDatumFilter('prijatia')" style="cursor:pointer;font-size:10px" title="Filter dátumu">▼</span></th>
+            <th>Realizácia <span id="df-btn-real" onclick="otvorDatumFilter('real')" style="cursor:pointer;font-size:10px" title="Filter dátumu">▼</span></th>
+            <th>Plán <span id="df-btn-plan" onclick="otvorDatumFilter('plan')" style="cursor:pointer;font-size:10px" title="Filter dátumu">▼</span></th>
+            <th>Technik</th>
+            <th>LT <span id="df-btn-lt" onclick="otvorDatumFilter('lt')" style="cursor:pointer;font-size:10px" title="Filter dátumu">▼</span></th>
+            <th>Do/Po LT</th>
             <th>ADD</th><th>Poznámky</th>
           </tr>
           <tr class="filter-row" id="filter-row">
@@ -573,6 +580,7 @@ body[data-role="technik"] #page5 { display:flex!important; flex-direction:column
       <span style="font-size:12px;color:var(--muted)">Dátum:</span>
       <input type="date" id="p-datum" onchange="showPlan()" style="border:1px solid var(--border2);border-radius:5px;padding:5px 9px;color:var(--text);background:#fff;outline:none">
       <span class="sum-lbl" id="p-sum"></span>
+      <button class="btn btn-outline" onclick="otvorHromadnaZmena()" style="margin-left:auto;font-size:12px" title="Hromadná zmena technika pre vybraný deň">⇄ Hromadná zmena technika</button>
     </div>
     <div class="tbl-wrap">
       <table class="tbl" id="p-tbl">
@@ -580,6 +588,32 @@ body[data-role="technik"] #page5 { display:flex!important; flex-direction:column
         <tbody id="p-tbody"></tbody>
       </table>
     </div>
+  </div>
+
+  <!-- MODAL: Hromadná zmena technika -->
+  <div class="modal-overlay" id="hromadna-overlay" onclick="closeHromadna()">
+  <div class="modal" style="max-width:420px" onclick="event.stopPropagation()">
+    <div class="modal-hdr">
+      <h3>⇄ Hromadná zmena technika</h3>
+      <button class="btn btn-outline btn-xs" onclick="closeHromadna()">✕</button>
+    </div>
+    <div style="padding:20px">
+      <p style="font-size:13px;color:var(--muted);margin-bottom:16px">Preradí všetky objednávky z jedného technika na druhého pre vybraný deň v Dennom pláne.</p>
+      <div class="field"><label>Z technika</label>
+        <select id="hz-z" style="width:100%;padding:8px;border:1px solid var(--border2);border-radius:6px">
+          <option value="">– vyberte –</option>
+        </select></div>
+      <div class="field"><label>Na technika</label>
+        <select id="hz-na" style="width:100%;padding:8px;border:1px solid var(--border2);border-radius:6px">
+          <option value="">– vyberte –</option>
+        </select></div>
+      <div id="hz-preview" style="font-size:12px;color:var(--muted);min-height:20px;margin:8px 0"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+        <button class="btn btn-outline" onclick="closeHromadna()">Zrušiť</button>
+        <button class="btn btn-accent" onclick="vykonatHromadnaZmena()">⇄ Preradiť</button>
+      </div>
+    </div>
+  </div>
   </div>
 
   <!-- ═══ TAB 3: PRE-REZERVOVANÉ ═══ -->
@@ -670,11 +704,28 @@ body[data-role="technik"] #page5 { display:flex!important; flex-direction:column
 </div>
 </div>
 
+<!-- MODAL: Dátumový filter -->
+<div class="modal-overlay" id="datum-filter-modal" onclick="resetDatumFilter()">
+<div class="modal" style="max-width:340px" onclick="event.stopPropagation()">
+  <div class="modal-hdr"><h3 id="df-title">Filter dátumu</h3>
+    <button class="btn btn-outline btn-xs" onclick="resetDatumFilter()">✕ Reset</button></div>
+  <div style="padding:16px">
+    <div class="field"><label>Od</label><input type="date" id="df-od" style="width:100%;padding:7px;border:1px solid var(--border2);border-radius:6px"></div>
+    <div class="field"><label>Do</label><input type="date" id="df-do" style="width:100%;padding:7px;border:1px solid var(--border2);border-radius:6px"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">
+      <button class="btn btn-outline" onclick="resetDatumFilter()">Reset</button>
+      <button class="btn btn-accent" onclick="aplikujDatumFilter()">Použiť filter</button>
+    </div>
+  </div>
+</div>
+</div>
+
 <!-- EDIT MODAL -->
 <div class="modal-overlay" id="edit-overlay" onclick="closeEditIfBg(event)">
 <div class="modal">
   <div class="modal-hdr">
     <h3 id="edit-title">Úprava objednávky</h3>
+    <button class="btn btn-outline btn-xs" onclick="zobrazHistoriu(editCurrentId)" title="História zmien">📋 História</button>
     <button class="btn btn-outline btn-xs" onclick="closeEdit()">✕</button>
   </div>
   <div class="modal-body">
@@ -1533,7 +1584,30 @@ function onIdInput(){
 // ════════════════════════════════════════════════════════════
 function zapisObjednavku(){
   const idObj=document.getElementById('n-id').value.trim().toUpperCase();
-  if(!idObj){toast('⚠ Vyplňte ID objednávky!');return;}
+  const meno=document.getElementById('n-meno').value.trim();
+  const adresa=document.getElementById('n-adresa').value.trim();
+  const typ=document.getElementById('n-typ').value.trim();
+  const balik=document.getElementById('n-balik').value.trim();
+  // Validácia povinných polí
+  const chyby=[];
+  if(!idObj) chyby.push('ID objednávky');
+  if(!meno)  chyby.push('Meno zákazníka');
+  if(!adresa) chyby.push('Adresa');
+  if(!typ)   chyby.push('Typ');
+  if(!balik) chyby.push('Balík');
+  if(chyby.length){
+    toast('⚠ Povinné polia: '+chyby.join(', '));
+    // Zvýrazni chýbajúce polia
+    ['n-id','n-meno','n-adresa','n-typ','n-balik'].forEach(id=>{
+      const el=document.getElementById(id);
+      if(el&&!el.value.trim()){
+        el.style.borderColor='var(--red)';
+        el.style.background='#fff5f5';
+        setTimeout(()=>{el.style.borderColor='';el.style.background='';},3000);
+      }
+    });
+    return;
+  }
   const dup=MOCK_OBJ.find(o=>o.id_obj.toUpperCase()===idObj);
   const w=document.getElementById('n-dup-warn');
   if(dup&&!pendingDup){pendingDup=idObj;w.style.display='block';w.textContent=`⚠ Duplicita: ID '${idObj}' existuje. Kliknite znovu ZAPÍSAŤ pre potvrdenie.`;setStatus('Duplicita – potvrďte zápis','warn');return;}
@@ -1746,6 +1820,16 @@ function renderObjTable(){
   if(freal)rows=rows.filter(o=>dateFilterMatch(o.real,freal));
   if(fplan)rows=rows.filter(o=>dateFilterMatch(o.plan,fplan));
   if(flt)rows=rows.filter(o=>dateFilterMatch(o.lt,flt));
+  // Rozšírený dátumový filter (od-do)
+  if(datumFilter.stlpec&&(datumFilter.od||datumFilter.do)){
+    rows=rows.filter(o=>{
+      const val=o[datumFilter.stlpec]||'';
+      if(!val) return false;
+      if(datumFilter.od&&val<datumFilter.od) return false;
+      if(datumFilter.do&&val>datumFilter.do) return false;
+      return true;
+    });
+  }
   if(selTechnici.size>0)rows=rows.filter(o=>selTechnici.has(o.zdroj||''));
   if(fdolt){
     rows=rows.filter(o=>{
@@ -1929,6 +2013,7 @@ function saveEdit(){
   o.real=document.getElementById('e-real').value;o.farba=farba;o.zmeneny=now8();
   toast(`✓ Uložené: ${editCurrentId}`);setStatus(`✓ Zmenené: ${editCurrentId}`,'ok');
   closeEdit();afterEditRefresh();
+  logHistoria(editCurrentId,'zmena',`Zmena údajov (${currentUser?.meno})`);
   api('PATCH',`/api/objednavky/${editCurrentId}`, mockToApi(o))
     .catch(e=>toast('⚠ API chyba: '+e.message));
 }
@@ -1936,6 +2021,7 @@ function uzavriDnes(){
   const oi=MOCK_OBJ.findIndex(o=>o.id_obj===editCurrentId);if(oi<0)return;
   MOCK_OBJ[oi].real=T;MOCK_OBJ[oi].farba='zelena';MOCK_OBJ[oi].zmeneny=now8();
   toast(`✅ Uzavreté: ${editCurrentId}`);closeEdit();afterEditRefresh();
+  logHistoria(editCurrentId,'uzavretie',`Uzavreté dnes (${currentUser?.meno})`);
   api('PATCH',`/api/objednavky/${editCurrentId}`,{datum_realizacie:T,farba:'zelena'})
     .catch(e=>toast('⚠ API chyba: '+e.message));
 }
@@ -1945,6 +2031,7 @@ function stornujDnes(){
   if(!pozn){const w=document.getElementById('e-warn');w.style.display='block';w.textContent='⚠ Dôvod storna musí byť v Poznámkach!';return;}
   MOCK_OBJ[oi].real=T;MOCK_OBJ[oi].farba='zlta';MOCK_OBJ[oi].pozn=pozn;MOCK_OBJ[oi].zmeneny=now8();
   toast(`⚠ Vystornované: ${editCurrentId}`);closeEdit();afterEditRefresh();
+  logHistoria(editCurrentId,'storno',`Storno: ${pozn} (${currentUser?.meno})`);
   api('PATCH',`/api/objednavky/${editCurrentId}`,{datum_realizacie:T,farba:'zlta',poznamky:pozn})
     .catch(e=>toast('⚠ API chyba: '+e.message));
 }
@@ -2297,6 +2384,323 @@ function exportExcel(){
         setStatus(`Export Excel: ${rows.length} záznamov`,'ok');
       });
   }
+}
+
+// ════════════════════════════════════════════════════════════
+// ZMENA 2: HROMADNÁ ZMENA TECHNIKA
+// ════════════════════════════════════════════════════════════
+function otvorHromadnaZmena(){
+  const datum=document.getElementById('p-datum').value;
+  if(!datum){toast('⚠ Najprv vyberte dátum v Dennom pláne');return;}
+  // Naplň selecty technikami z daného dňa
+  const technikovia=[...new Set(MOCK_OBJ.filter(o=>o.plan===datum&&!o.real&&o.farba!=='zlta').map(o=>o.zdroj).filter(Boolean))].sort();
+  if(!technikovia.length){toast('⚠ V Dennom pláne nie sú žiadne objednávky pre daný deň');return;}
+  const vsetciTech=[...new Set([...technikovia,...TECHNICI])].sort();
+  const opts=vsetciTech.map(t=>`<option>${t}</option>`).join('');
+  document.getElementById('hz-z').innerHTML='<option value="">– vyberte –</option>'+opts;
+  document.getElementById('hz-na').innerHTML='<option value="">– vyberte –</option>'+opts;
+  document.getElementById('hz-preview').textContent='';
+  document.getElementById('hromadna-overlay').classList.add('open');
+  // Live preview
+  ['hz-z','hz-na'].forEach(id=>{
+    document.getElementById(id).onchange=()=>{
+      const z=document.getElementById('hz-z').value;
+      const datum2=document.getElementById('p-datum').value;
+      const pocet=MOCK_OBJ.filter(o=>o.plan===datum2&&o.zdroj===z&&!o.real&&o.farba!=='zlta').length;
+      if(z) document.getElementById('hz-preview').textContent=`Preradí ${pocet} objednávok z ${z}`;
+    };
+  });
+}
+function closeHromadna(){document.getElementById('hromadna-overlay').classList.remove('open');}
+function vykonatHromadnaZmena(){
+  const z=document.getElementById('hz-z').value;
+  const na=document.getElementById('hz-na').value;
+  const datum=document.getElementById('p-datum').value;
+  if(!z||!na){toast('⚠ Vyberte oboch technikov');return;}
+  if(z===na){toast('⚠ Technikovia musia byť rôzni');return;}
+  const dotknuteObjednavky=MOCK_OBJ.filter(o=>o.plan===datum&&o.zdroj===z&&!o.real&&o.farba!=='zlta');
+  if(!dotknuteObjednavky.length){toast('⚠ Žiadne objednávky na preradenie');return;}
+  // Lokálna zmena + API PATCH pre každú objednávku
+  let count=0;
+  dotknuteObjednavky.forEach(o=>{
+    o.zdroj=na;o.zmeneny=now8();count++;
+    api('PATCH',`/api/objednavky/${o.id_obj}`,{zdroj:na}).catch(()=>{});
+    logHistoria(o.id_obj,'zmena',`Hromadná zmena technika: ${z} → ${na} (${currentUser?.meno})`);
+  });
+  closeHromadna();
+  showPlan();afterEditRefresh();
+  toast(`✓ Preradených ${count} objednávok: ${z} → ${na}`);
+  setStatus(`Hromadná zmena: ${count} objednávok → ${na}`,'ok');
+}
+
+// ════════════════════════════════════════════════════════════
+// ZMENA 3: HISTÓRIA ZMIEN
+// ════════════════════════════════════════════════════════════
+function logHistoria(id_obj,akcia,detail){
+  if(!API_TOKEN) return;
+  api('POST','/api/historia',{id_obj,akcia,detail}).catch(()=>{});
+}
+
+async function zobrazHistoriu(id_obj){
+  try{
+    const rows=await api('GET',`/api/historia/${id_obj}`);
+    if(!rows.length){toast('Žiadna história zmien');return;}
+    const w=window.open('','_blank','width=600,height=500');
+    const html=rows.map(r=>`<tr>
+      <td style="padding:4px 8px;border-bottom:1px solid #eee;font-size:12px;white-space:nowrap">${r.cas?.slice(0,16).replace('T',' ')||''}</td>
+      <td style="padding:4px 8px;border-bottom:1px solid #eee;font-size:12px">${r.user_meno||''}</td>
+      <td style="padding:4px 8px;border-bottom:1px solid #eee;font-size:12px">${r.akcia||''}</td>
+      <td style="padding:4px 8px;border-bottom:1px solid #eee;font-size:12px">${r.detail||''}</td>
+    </tr>`).join('');
+    w.document.write(`<!DOCTYPE html><html><head><title>História: ${id_obj}</title>
+    <style>body{font-family:Segoe UI,Arial,sans-serif;padding:16px}h3{color:#1565c0}
+    table{border-collapse:collapse;width:100%}th{background:#1565c0;color:#fff;padding:6px 8px;text-align:left;font-size:12px}</style></head>
+    <body><h3>História zmien: ${id_obj}</h3><table>
+    <thead><tr><th>Čas</th><th>Používateľ</th><th>Akcia</th><th>Detail</th></tr></thead>
+    <tbody>${html}</tbody></table></body></html>`);
+  }catch(e){toast('⚠ Chyba histórie: '+e.message);}
+}
+
+// ════════════════════════════════════════════════════════════
+// ZMENA 4+5: MESAČNÝ VÝKAZ + ŠTATISTIKY (záložka Nenaplánované → tlačidlá)
+// ════════════════════════════════════════════════════════════
+function exportMesacnyVykaz(){
+  // Dialóg: vyber technika a mesiac
+  const techVyber=TECHNICI.length?TECHNICI.map(t=>`<option>${t}</option>`).join(''):'';
+  const mesVyber=['2026-01','2026-02','2026-03','2026-04','2026-05','2026-06',
+    '2026-07','2026-08','2026-09','2026-10','2026-11','2026-12']
+    .map(m=>`<option${m===T.slice(0,7)?' selected':''}>${m}</option>`).join('');
+  const w=window.open('','_blank','width=500,height:340');
+  w.document.write(`<!DOCTYPE html><html><head><title>Mesačný výkaz</title>
+  <style>body{font-family:Segoe UI,Arial,sans-serif;padding:24px;background:#f0f2f5}
+  label{display:block;margin-top:12px;font-size:13px;font-weight:600;color:#333}
+  select,button{width:100%;padding:8px;margin-top:4px;border:1px solid #ccc;border-radius:6px;font-size:13px}
+  button{background:#1565c0;color:#fff;cursor:pointer;margin-top:16px;padding:10px}
+  h3{color:#1565c0}</style></head>
+  <body><h3>📊 Mesačný výkaz technika</h3>
+  <label>Technik</label><select id="mv-tech"><option value="">Všetci</option>${techVyber}</select>
+  <label>Mesiac</label><select id="mv-mes">${mesVyber}</select>
+  <button onclick="window.opener.generujVykaz(document.getElementById('mv-tech').value,document.getElementById('mv-mes').value);window.close()">📥 Generovať Excel</button>
+  </body></html>`);
+}
+
+function generujVykaz(technik,mesiac){
+  const [rok,mes]=mesiac.split('-').map(Number);
+  let riadky=MOCK_OBJ.filter(o=>{
+    const d=new Date((o.plan||o.prijatia)+'T00:00:00');
+    return d.getFullYear()===rok&&(d.getMonth()+1)===mes;
+  });
+  if(technik) riadky=riadky.filter(o=>o.zdroj===technik);
+  if(!riadky.length){toast('⚠ Žiadne objednávky pre daný mesiac/technika');return;}
+
+  const uzavrete=riadky.filter(o=>o.farba==='zelena').length;
+  const storno=riadky.filter(o=>o.farba==='zlta').length;
+  const otvorene=riadky.length-uzavrete-storno;
+  const cols=['ID','Meno zákazníka','Adresa','Typ','Balík','Prijatie','Plán','Realizácia','Technik','Stav'];
+  const dataRows=riadky.map(o=>[
+    o.id_obj,o.meno,o.adresa,o.typ,o.balik,
+    fmtD(o.prijatia),fmtD(o.plan),fmtD(o.real),o.zdroj,
+    o.farba==='zelena'?'Uzavreté':o.farba==='zlta'?'Storno':'Otvorené'
+  ]);
+
+  const dnes=new Date().toISOString().slice(0,10);
+  const techLabel=technik||'Všetci technici';
+
+  // Generuj Excel pomocou JSZip (rovnaká logika ako exportExcel)
+  _exportDoExcelu({
+    cols, dataRows,
+    nazovListu:`Výkaz ${mesiac} ${technik||''}`.slice(0,31),
+    subor:`vykaz_${technik||'vsetci'}_${mesiac}.xlsx`,
+    sumarika:[
+      `Technik: ${techLabel} | Mesiac: ${mesiac}`,
+      `Celkom: ${riadky.length} | Uzavreté: ${uzavrete} | Storno: ${storno} | Otvorené: ${otvorene}`
+    ]
+  });
+  toast(`✓ Výkaz: ${riadky.length} objednávok`);
+}
+
+function _exportDoExcelu({cols, dataRows, nazovListu, subor, sumarika}){
+  const dnes=new Date().toISOString().slice(0,10);
+  const widths=cols.map(c=>Math.max(c.length,12));
+  const colsXml=widths.map((w,i)=>`<col min="${i+1}" max="${i+1}" width="${w}" customWidth="1"/>`).join('');
+
+  const stylesXml=`<?xml version="1.0" encoding="UTF-8"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<fonts><font><sz val="11"/><name val="Calibri"/></font>
+<font><sz val="11"/><name val="Calibri"/><b/><color rgb="FFFFFFFF"/></font>
+<font><sz val="10"/><name val="Calibri"/><i/><color rgb="FF555555"/></font></fonts>
+<fills><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>
+<fill><patternFill patternType="solid"><fgColor rgb="FF1565C0"/></patternFill></fill>
+<fill><patternFill patternType="solid"><fgColor rgb="FFF5F5F5"/></patternFill></fill></fills>
+<borders><border><left/><right/><top/><bottom/><diagonal/></border>
+<border><left style="thin"><color rgb="FFDDDDDD"/></left><right style="thin"><color rgb="FFDDDDDD"/></right>
+<top style="thin"><color rgb="FFDDDDDD"/></top><bottom style="thin"><color rgb="FFDDDDDD"/></bottom><diagonal/></border></borders>
+<cellStyleXfs><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+<cellXfs>
+<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
+<xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"><alignment horizontal="center"/></xf>
+<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/>
+<xf numFmtId="0" fontId="2" fillId="3" borderId="0" xfId="0" applyFont="1" applyFill="1"/>
+</cellXfs></styleSheet>`;
+
+  function esc(v){return String(v||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+  function cellRef(r,c){return String.fromCharCode(65+c)+(r+1);}
+
+  let sheetRows='';
+  let r=0;
+  // Sumarika riadky
+  if(sumarika){
+    sumarika.forEach(s=>{
+      sheetRows+=`<row r="${r+1}"><c r="${cellRef(r,0)}" s="3" t="inlineStr"><is><t>${esc(s)}</t></is></c></row>`;
+      r++;
+    });
+  }
+  // Hlavička
+  sheetRows+=`<row r="${r+1}" ht="18">`;
+  cols.forEach((h,c)=>{sheetRows+=`<c r="${cellRef(r,c)}" s="1" t="inlineStr"><is><t>${esc(h)}</t></is></c>`;});
+  sheetRows+=`</row>`;r++;
+  // Dáta
+  dataRows.forEach(row=>{
+    sheetRows+=`<row r="${r+1}">`;
+    row.forEach((v,c)=>{sheetRows+=`<c r="${cellRef(r,c)}" s="2" t="inlineStr"><is><t>${esc(v)}</t></is></c>`;});
+    sheetRows+=`</row>`;r++;
+  });
+
+  const sheetXml=`<?xml version="1.0" encoding="UTF-8"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<cols>${colsXml}</cols>
+<sheetData>${sheetRows}</sheetData></worksheet>`;
+
+  const wbXml=`<?xml version="1.0" encoding="UTF-8"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+<sheets><sheet name="${esc(nazovListu)}" sheetId="1" r:id="rId1"/></sheets></workbook>`;
+  const wbRels=`<?xml version="1.0" encoding="UTF-8"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>
+<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`;
+  const appRels=`<?xml version="1.0" encoding="UTF-8"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`;
+  const ct=`<?xml version="1.0" encoding="UTF-8"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+<Default Extension="xml" ContentType="application/xml"/>
+<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>
+<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>`;
+
+  function doExport(){
+    const zip=new JSZip();
+    zip.file('[Content_Types].xml',ct);
+    zip.file('_rels/.rels',appRels);
+    zip.file('xl/workbook.xml',wbXml);
+    zip.file('xl/_rels/workbook.xml.rels',wbRels);
+    zip.file('xl/styles.xml',stylesXml);
+    zip.file('xl/worksheets/sheet1.xml',sheetXml);
+    zip.generateAsync({type:'blob',mimeType:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}).then(blob=>{
+      const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=subor;a.click();URL.revokeObjectURL(a.href);
+    });
+  }
+  if(typeof JSZip==='undefined'){
+    const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+    s.onload=doExport;document.head.appendChild(s);
+  } else doExport();
+}
+
+// ════════════════════════════════════════════════════════════
+// ZMENA 5: ŠTATISTIKY
+// ════════════════════════════════════════════════════════════
+function zobrazStatistiky(){
+  const totalAll=MOCK_OBJ.length;
+  const uzav=MOCK_OBJ.filter(o=>o.farba==='zelena').length;
+  const storno=MOCK_OBJ.filter(o=>o.farba==='zlta').length;
+  const otv=totalAll-uzav-storno;
+
+  // Výkon technikov
+  const techStats={};
+  MOCK_OBJ.forEach(o=>{
+    if(!o.zdroj) return;
+    if(!techStats[o.zdroj]) techStats[o.zdroj]={celkom:0,uzav:0,storno:0};
+    techStats[o.zdroj].celkom++;
+    if(o.farba==='zelena') techStats[o.zdroj].uzav++;
+    if(o.farba==='zlta') techStats[o.zdroj].storno++;
+  });
+
+  // Priemerná doba realizácie (dni od prijatia po realizáciu)
+  const realizovane=MOCK_OBJ.filter(o=>o.real&&o.prijatia);
+  let avgDni='N/A';
+  if(realizovane.length){
+    const sum=realizovane.reduce((acc,o)=>{
+      const diff=(new Date(o.real)-new Date(o.prijatia))/(1000*60*60*24);
+      return acc+(diff||0);
+    },0);
+    avgDni=(sum/realizovane.length).toFixed(1)+' dní';
+  }
+
+  const techHTML=Object.entries(techStats).sort((a,b)=>b[1].celkom-a[1].celkom).map(([t,s])=>`
+    <tr><td style="padding:5px 8px">${t}</td>
+    <td style="padding:5px 8px;text-align:center">${s.celkom}</td>
+    <td style="padding:5px 8px;text-align:center;color:#1b5e20">${s.uzav}</td>
+    <td style="padding:5px 8px;text-align:center;color:#c62828">${s.storno}</td>
+    <td style="padding:5px 8px;text-align:center">${s.celkom?Math.round(s.uzav/s.celkom*100)+'%':'-'}</td></tr>`).join('');
+
+  const w=window.open('','_blank','width=700,height:550');
+  w.document.write(`<!DOCTYPE html><html><head><title>Štatistiky DISPECING</title>
+  <style>body{font-family:Segoe UI,Arial,sans-serif;padding:20px;background:#f0f2f5}
+  h2{color:#1565c0}h3{color:#444;margin-top:20px}
+  .karta{background:#fff;border-radius:8px;padding:16px;margin-bottom:16px;box-shadow:0 1px 4px rgba(0,0,0,.1)}
+  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+  .val{font-size:32px;font-weight:700;color:#1565c0}.lbl{font-size:12px;color:#666}
+  table{border-collapse:collapse;width:100%}th{background:#1565c0;color:#fff;padding:6px 8px;text-align:left;font-size:12px}
+  tr:nth-child(even){background:#f5f5f5}</style></head>
+  <body><h2>📊 Štatistiky DISPECING – SUPTEL ŽILINA</h2>
+  <div class="grid">
+    <div class="karta"><div class="val">${totalAll}</div><div class="lbl">Celkom objednávok</div></div>
+    <div class="karta"><div class="val" style="color:#1b5e20">${uzav}</div><div class="lbl">Uzavreté</div></div>
+    <div class="karta"><div class="val" style="color:#c62828">${storno}</div><div class="lbl">Storno</div></div>
+    <div class="karta"><div class="val" style="color:#e65100">${otv}</div><div class="lbl">Otvorené</div></div>
+  </div>
+  <div class="karta"><strong>Priemerná doba realizácie:</strong> ${avgDni}</div>
+  <h3>Výkon technikov</h3>
+  <div class="karta"><table>
+  <thead><tr><th>Technik</th><th>Celkom</th><th>Uzavreté</th><th>Storno</th><th>Úspešnosť</th></tr></thead>
+  <tbody>${techHTML}</tbody></table></div>
+  </body></html>`);
+}
+
+// ════════════════════════════════════════════════════════════
+// ZMENA 6: ROZŠÍRENÝ DÁTUMOVÝ FILTER
+// ════════════════════════════════════════════════════════════
+let datumFilter={stlpec:'',od:'',do:''};
+
+function otvorDatumFilter(stlpec){
+  datumFilter.stlpec=stlpec;
+  const nazvy={prijatia:'Prijatie',plan:'Plán',real:'Realizácia',lt:'LT'};
+  const modal=document.getElementById('datum-filter-modal');
+  document.getElementById('df-title').textContent='Filter: '+nazvy[stlpec];
+  document.getElementById('df-od').value=datumFilter.od||'';
+  document.getElementById('df-do').value=datumFilter.do||'';
+  modal.classList.add('open');
+}
+
+function aplikujDatumFilter(){
+  datumFilter.od=document.getElementById('df-od').value;
+  datumFilter.do=document.getElementById('df-do').value;
+  document.getElementById('datum-filter-modal').classList.remove('open');
+  renderObjTable();
+  // Zvýrazni aktívny filter
+  ['prijatia','plan','real','lt'].forEach(s=>{
+    const btn=document.getElementById('df-btn-'+s);
+    if(btn) btn.style.color=(datumFilter.stlpec===s&&(datumFilter.od||datumFilter.do))?'var(--accent)':'';
+  });
+}
+
+function resetDatumFilter(){
+  datumFilter={stlpec:'',od:'',do:''};
+  document.getElementById('df-od').value='';
+  document.getElementById('df-do').value='';
+  document.getElementById('datum-filter-modal').classList.remove('open');
+  renderObjTable();
 }
 
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeEdit();});
