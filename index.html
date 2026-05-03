@@ -19,10 +19,10 @@
   --bg:#f0f2f5; --surface:#ffffff; --surface2:#f8f9fc;
   --border:#dde1e9; --border2:#c8cdd8;
   --accent:#1565c0; --accent2:#1976d2; --accent-light:#e3f0ff;
-  --green:#2e7d32; --green-bg:#e8f5e9; --green-t:#4caf50;
-  --yellow:#7b5300; --yellow-bg:#fff8e1; --yellow-t:#ffc107;
-  --blue:#0d47a1; --blue-bg:#e3f2fd; --blue-t:#2196f3;
-  --red:#c62828; --red-bg:#ffebee; --red-t:#ef5350;
+  --green:#1b5e20; --green-bg:#a5d6a7; --green-t:#2e7d32;
+  --yellow:#6d4c00; --yellow-bg:#fff176; --yellow-t:#fbc02d;
+  --blue:#0d47a1; --blue-bg:#90caf9; --blue-t:#1976d2;
+  --red:#b71c1c; --red-bg:#ef9a9a; --red-t:#c62828;
   --text:#1a1d23; --text2:#4b5563; --muted:#6b7280;
   --font:'Inter',sans-serif; --mono:'JetBrains Mono',monospace;
   --sidebar:220px; --topbar:48px;
@@ -92,8 +92,13 @@ input,select,textarea,button{font-family:var(--font);font-size:13px}
 .notif-hdr{padding:12px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
 .notif-hdr h4{flex:1;font-size:13px;font-weight:600}
 .notif-item{padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s}
-.notif-item:hover{background:var(--surface2)}
-.notif-item.unread{border-left:3px solid var(--accent);background:var(--accent-light)}
+.notif-item:hover{filter:brightness(.96)}
+.notif-item.unread{border-left:3px solid var(--accent)}
+.notif-item.notif-uzavretie{background:var(--green-bg)}
+.notif-item.notif-uzavretie .ni-typ,.notif-item.notif-uzavretie .ni-txt{color:var(--green)}
+.notif-item.notif-storno{background:var(--yellow-bg)}
+.notif-item.notif-storno .ni-typ,.notif-item.notif-storno .ni-txt{color:var(--yellow)}
+.notif-item.notif-poznamka{background:#fff}
 .notif-item .ni-typ{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
 .notif-item .ni-txt{font-size:12px;color:var(--text);margin-top:2px}
 .notif-item .ni-time{font-size:11px;color:var(--muted);margin-top:2px}
@@ -1210,7 +1215,14 @@ function switchTab(idx){
     document.getElementById('snav'+i)?.classList.toggle('active',i===idx);
   }
   activeTab=idx;
-  if(idx===1)renderObjTable();
+  if(idx===1){
+    renderObjTable();
+    // Auto-scroll na koniec – najnovšie objednávky sú dole, dispečérka ich vidí hneď
+    requestAnimationFrame(()=>{
+      const wrap=document.querySelector('#page1 .tbl-wrap');
+      if(wrap) wrap.scrollTop=wrap.scrollHeight;
+    });
+  }
   if(idx===2){showPlan();}
   if(idx===3)showPrerezerv();
   if(idx===4)showNeplan();
@@ -1219,7 +1231,16 @@ function switchTab(idx){
 }
 function fillMobTechnik(){
   const sel=document.getElementById('mob-tech');
-  sel.innerHTML='<option value="">– Technik –</option>'+TECHNICI.map(t=>`<option>${t}</option>`).join('');
+  // Zlúčime 4 zdroje aby dropdown obsahoval VŠETKÝCH evidovaných technikov
+  // aj v prípade, že /api/technici je stale alebo nezachytí čerstvo vytvoreného usera.
+  const fromUsers=(DEMO_USERS||[]).filter(u=>u.rola==='technik').map(u=>u.technik_meno||u.meno).filter(Boolean);
+  const fromMockAll=[...new Set(MOCK_OBJ.map(o=>o.zdroj).filter(Boolean))];
+  const me=(currentUser&&currentUser.technik_meno)?[currentUser.technik_meno]:[];
+  const all=[...new Set([...(TECHNICI||[]),...fromUsers,...fromMockAll,...me])].sort();
+  // Zachovaj aktuálne vybranú hodnotu (napr. pri polling/refresh počas práce)
+  const prev=sel.value;
+  sel.innerHTML='<option value="">– Technik –</option>'+all.map(t=>`<option>${t}</option>`).join('');
+  if(prev) sel.value=prev;
 }
 
 // ════════════════════════════════════════════════════════════
@@ -1265,9 +1286,10 @@ function initApp(){
   updateDash();
 }
 function fillTechDatalist(){
-  // Technici = z API (TECHNICI) + unikátne hodnoty zo zdroj stĺpca objednávok
+  // Technici = z API (TECHNICI) + DEMO_USERS technici + unikátne hodnoty zo zdroj stĺpca
   const dlT=document.getElementById('dl-technik');
-  const all=[...new Set([...TECHNICI,...MOCK_OBJ.map(o=>o.zdroj).filter(Boolean)])].sort();
+  const fromUsers=(DEMO_USERS||[]).filter(u=>u.rola==='technik').map(u=>u.technik_meno||u.meno).filter(Boolean);
+  const all=[...new Set([...(TECHNICI||[]),...fromUsers,...MOCK_OBJ.map(o=>o.zdroj).filter(Boolean)])].sort();
   dlT.innerHTML=all.map(t=>`<option>${t}</option>`).join('');
   // Typy z objednávok
   const dlTyp=document.getElementById('dl-typ');
@@ -1296,7 +1318,8 @@ function fillFilterDropdowns(){
 let selTechnici=new Set(); // prázdna = všetci
 function buildMsTechItems(){
   const items=document.getElementById('ms-tech-items');
-  const all=[...new Set([...TECHNICI,...MOCK_OBJ.map(o=>o.zdroj).filter(Boolean)])].sort();
+  const fromUsers=(DEMO_USERS||[]).filter(u=>u.rola==='technik').map(u=>u.technik_meno||u.meno).filter(Boolean);
+  const all=[...new Set([...(TECHNICI||[]),...fromUsers,...MOCK_OBJ.map(o=>o.zdroj).filter(Boolean)])].sort();
   items.innerHTML=all.map(t=>`<div class="ms-item"><input type="checkbox" id="ms-t-${t.replace(/\s/g,'_')}" value="${t}" onchange="msChange()"><label for="ms-t-${t.replace(/\s/g,'_')}" style="cursor:pointer">${t}</label></div>`).join('');
   document.getElementById('ms-all').checked=true;
 }
@@ -1356,12 +1379,21 @@ function toggleNotif(){document.getElementById('notif-panel').classList.toggle('
 function renderNotifList(){
   const el=document.getElementById('notif-list');
   if(!NOTIF.length){el.innerHTML='<div style="padding:14px;color:var(--muted);font-size:12px">Žiadne notifikácie.</div>';return;}
-  el.innerHTML=NOTIF.sort((a,b)=>b.cas.localeCompare(a.cas)).map(n=>`
-    <div class="notif-item ${n.precitana?'':'unread'}" onclick="readNotif('${n.id}','${n.id_obj}')">
-      <div class="ni-typ">${n.typ==='uzavretie'?'✅ Uzavretie':n.typ==='storno'?'⚠ Storno':'📝 Poznámka'}</div>
+  el.innerHTML=NOTIF.sort((a,b)=>b.cas.localeCompare(a.cas)).map(n=>{
+    // Typová farba: uzavretie=zelená, storno=žltá, poznámka=biela
+    const typCls = n.typ==='uzavretie' ? 'notif-uzavretie'
+                 : n.typ==='storno'    ? 'notif-storno'
+                                       : 'notif-poznamka';
+    const typLbl = n.typ==='uzavretie' ? '✅ Uzavretie'
+                 : n.typ==='storno'    ? '⚠ Storno'
+                                       : '📝 Poznámka';
+    return `
+    <div class="notif-item ${typCls} ${n.precitana?'':'unread'}" onclick="readNotif('${n.id}','${n.id_obj}')">
+      <div class="ni-typ">${typLbl}</div>
       <div class="ni-txt">${n.text}</div>
       <div class="ni-time">${fmtD(n.cas.split('T')[0])} ${n.cas.split('T')[1].slice(0,5)}</div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 function readNotif(nid,id_obj){
   const idx=NOTIF.findIndex(x=>x.id===nid);
@@ -1825,6 +1857,10 @@ function renderObjTable(){
   const fpozn=(document.getElementById('f-pozn').value||'').toLowerCase();
 
   let rows=[...MOCK_OBJ];
+  // Default zoradenie: najstaršie hore, NAJNOVŠIE DOLE (chronologicky podľa prijatia).
+  // Pri 10k+ riadkoch dispečérka vidí najnovšie po auto-scrolle na koniec
+  // bez nutnosti listovať celý zoznam.
+  rows.sort((a,b)=>(a.prijatia||'').localeCompare(b.prijatia||'')||(a.id_obj||'').localeCompare(b.id_obj||''));
   if(quickMode==='neukoncene')rows=rows.filter(o=>!o.real&&o.farba!=='zlta');
   else if(quickMode==='ukoncene')rows=rows.filter(o=>o.real&&o.farba==='zelena');
   else if(quickMode==='storno')rows=rows.filter(o=>o.farba==='zlta');
@@ -1865,7 +1901,10 @@ function renderObjTable(){
   if(fpozn)rows=rows.filter(o=>(o.pozn||'').toLowerCase().includes(fpozn));
 
   const tbody=document.getElementById('s-tbody');
-  tbody.innerHTML=rows.slice(0,500).map(o=>{
+  // Pri viac ako 500 riadkoch zobrazujeme POSLEDNÝCH 500 (najnovšie),
+  // pretože rows je zoradené ascending – najnovšie sú na konci.
+  const visible = rows.length>500 ? rows.slice(-500) : rows;
+  tbody.innerHTML=visible.map(o=>{
     const df=getDisplayFarba(o);
     const cls=farbaCls(df);
     // doLT = LT - plán/realizácia: kladné = splnené včas, záporné = po LT (meškanie)
@@ -1885,7 +1924,7 @@ function renderObjTable(){
       <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis">${o.pozn||''}</td>
     </tr>`;
   }).join('');
-  document.getElementById('s-sum').textContent=`Zobrazených: ${Math.min(rows.length,500)}${rows.length>500?' (prvých 500)':''}`;
+  document.getElementById('s-sum').textContent=`Zobrazených: ${Math.min(rows.length,500)}${rows.length>500?' (posledných 500 – najnovšie)':''}`;
   setStatus(`Objednávky: ${rows.length} záznamov`,'ok');
 }
 
@@ -1949,17 +1988,35 @@ function emailPrerezerv(){
     body+='\n';
   });
   body+=`— DISPEČERSKÝ SYSTÉM ZRIADOVANIE · SUPTEL ŽILINA`;
-  const predmet=encodeURIComponent('Po LT - pre-rezervovanie objednávok ADD');
-  const teloPre=encodeURIComponent(body);
-  // Otvor reálny mailový klient – cez dynamický <a>.click() rešpektuje OS default mail handler.
-  // (window.location.href='mailto:...' v Edge/Chrome niekedy routuje do nového Outlooku web.
-  //  Tento prístup spoľahlivo otvorí klasický Outlook, ak je nastavený ako default.)
+  const subject='Po LT - pre-rezervovanie objednávok ADD';
+
+  // ─── Otvorenie v STAROM Outlook cez stiahnutie .eml súboru ─────────────
+  // Prečo .eml a nie mailto:
+  //   – mailto: handler v Edge/Chrome býva unesený (web Outlook / nový Outlook),
+  //     a to aj keď user nemá nový Outlook nainštalovaný.
+  //   – .eml súbor má v Office prostredí pevnú asociáciu = klasický Outlook.
+  //   – X-Unsent: 1 hlavička dáva Outlook pokyn otvoriť ho ako nový draft
+  //     (vyplnený formulár pripravený na Send), nie ako prečítanú správu.
+  //   – Funguje aj keď je v OS default mail klient nastavený zle.
+  const utf8Subject='=?utf-8?B?'+btoa(unescape(encodeURIComponent(subject)))+'?=';
+  const emlContent=[
+    'X-Unsent: 1',
+    'To: ',
+    'Subject: '+utf8Subject,
+    'Content-Type: text/plain; charset=utf-8',
+    'Content-Transfer-Encoding: 8bit',
+    '',
+    body
+  ].join('\r\n');
+  const blob=new Blob([emlContent],{type:'message/rfc822'});
+  const url=URL.createObjectURL(blob);
   const a=document.createElement('a');
-  a.href=`mailto:?subject=${predmet}&body=${teloPre}`;
+  a.href=url;
+  a.download='prerezervovanie_'+new Date().toISOString().slice(0,10).replace(/-/g,'')+'.eml';
   a.style.display='none';
   document.body.appendChild(a);
   a.click();
-  setTimeout(()=>{ if(a.parentNode) a.parentNode.removeChild(a); },0);
+  setTimeout(()=>{ URL.revokeObjectURL(url); if(a.parentNode) a.parentNode.removeChild(a); },1500);
   // Označ email odoslaný + uloží do API
   prChecked.forEach(id=>{
     const oi=MOCK_OBJ.findIndex(x=>x.id_obj===id);
@@ -1971,7 +2028,7 @@ function emailPrerezerv(){
   });
   prChecked.clear();
   setTimeout(showPrerezerv,400);
-  toast('✉ Mailový klient otvorený');
+  toast('✓ Email pripravený – kliknite na stiahnutý .eml súbor v lište prehliadača (otvorí sa starý Outlook)');
 }
 
 // ════════════════════════════════════════════════════════════
@@ -2172,6 +2229,15 @@ const ROLE_OPTIONS=['admin','dispečér','technik','operátor'];
 
 function renderUserTable(){
   const tbody=document.getElementById('user-tbody');
+  // Datalist pre technik_meno autocomplete (existujúci technici z viacerých zdrojov)
+  const techSet=[...new Set([
+    ...(TECHNICI||[]),
+    ...(DEMO_USERS||[]).filter(u=>u.rola==='technik').map(u=>u.technik_meno).filter(Boolean),
+    ...MOCK_OBJ.map(o=>o.zdroj).filter(Boolean)
+  ])].sort();
+  let dl=document.getElementById('dl-tech-uzers');
+  if(!dl){ dl=document.createElement('datalist'); dl.id='dl-tech-uzers'; document.body.appendChild(dl); }
+  dl.innerHTML=techSet.map(t=>`<option value="${t.replace(/"/g,'&quot;')}">`).join('');
   tbody.innerHTML=DEMO_USERS.map((u,idx)=>`
     <tr>
       <td><input value="${u.meno}" onchange="updateUser(${idx},'meno',this.value)" style="min-width:150px"></td>
@@ -2188,10 +2254,7 @@ function renderUserTable(){
         </select>
       </td>
       <td>
-        ${u.rola==='technik'?`<select onchange="updateUser(${idx},'technik_meno',this.value)">
-          <option value="">–</option>
-          ${TECHNICI.map(t=>`<option${t===u.technik_meno?' selected':''}>${t}</option>`).join('')}
-        </select>`:'<span style="color:var(--muted);font-size:11px">–</span>'}
+        ${u.rola==='technik'?`<input type="text" list="dl-tech-uzers" value="${(u.technik_meno||'').replace(/"/g,'&quot;')}" onchange="updateUser(${idx},'technik_meno',this.value)" placeholder="napr. Poštulka Róbert" style="width:100%;padding:5px 8px;border:1px solid var(--border2);border-radius:5px">`:'<span style="color:var(--muted);font-size:11px">–</span>'}
       </td>
       <td><button class="btn btn-red btn-xs" onclick="vymazUser(${idx})" title="Vymazať"${u.email===currentUser?.email?' disabled style="opacity:.4;cursor:not-allowed"':''}>🗑</button></td>
     </tr>
@@ -2245,7 +2308,13 @@ function togglePass(idx){showPass[idx]=!showPass[idx];renderUserTable();}
 function updateUser(idx,field,val){
   if(idx>=DEMO_USERS.length) return;
   DEMO_USERS[idx][field]=val;
-  if(field==='rola'||field==='technik_meno') renderUserTable();
+  if(field==='rola'||field==='technik_meno'||field==='meno'){
+    // Refresh všetkých technik dropdownov, aby zmena/vznik nového technika bola hneď vidieť
+    renderUserTable();
+    fillTechDatalist();
+    fillMobTechnik();
+    buildMsTechItems();
+  }
   const u=DEMO_USERS[idx];
   if(!u._id){console.warn('updateUser: _id chýba pre idx',idx);return;}
   const rolaApiMap={'operátor':'operator','dispečér':'dispecer','admin':'admin','technik':'technik'};
@@ -2302,9 +2371,9 @@ function exportExcel(){
   const cols=['ID objednávky','Meno zákazníka','Adresa','Typ','Balík','Prijatie','Realizácia','Plán','Technik','LT','Do/Po LT','ADD','Poznámky'];
   const dnes=new Date().toISOString().slice(0,10);
 
-  // Farby (ARGB pre OOXML)
-  const bgMap={'tr-green':'FFC8E6C9','tr-yellow':'FFFFF9C4','tr-blue':'FFBBDEFB','tr-red':'FFFFCDD2','tr-none':'FFFFFFFF'};
-  const fgMap={'tr-green':'FF1B5E20','tr-yellow':'FF7B5300','tr-blue':'FF0D47A1','tr-red':'FFC62828','tr-none':'FF1A1D23'};
+  // Farby (ARGB pre OOXML) – zladené so sýtejšími CSS premennými
+  const bgMap={'tr-green':'FFA5D6A7','tr-yellow':'FFFFF176','tr-blue':'FF90CAF9','tr-red':'FFEF9A9A','tr-none':'FFFFFFFF'};
+  const fgMap={'tr-green':'FF1B5E20','tr-yellow':'FF6D4C00','tr-blue':'FF0D47A1','tr-red':'FFB71C1C','tr-none':'FF1A1D23'};
 
   // Zoberieme dáta a farby
   const dataRows=rows.map(tr=>{
@@ -2652,61 +2721,103 @@ function _exportDoExcelu({cols, dataRows, nazovListu, subor, sumarika}){
 // ZMENA 5: ŠTATISTIKY
 // ════════════════════════════════════════════════════════════
 function zobrazStatistiky(){
-  const totalAll=MOCK_OBJ.length;
-  const uzav=MOCK_OBJ.filter(o=>o.farba==='zelena').length;
-  const storno=MOCK_OBJ.filter(o=>o.farba==='zlta').length;
-  const otv=totalAll-uzav-storno;
+  // Otvor okno – obsah generujeme dynamicky cez JS, dáta čerpáme z parenta
+  const w=window.open('','_blank','width=820,height=640');
+  if(!w){toast('⚠ Otváranie okna bolo zablokované prehliadačom');return;}
+  // Predpočítané: dostupné roky z prijatia
+  const rokyAll=[...new Set(MOCK_OBJ.map(o=>(o.prijatia||'').slice(0,4)).filter(Boolean))].sort();
+  const aktRok=String(new Date().getFullYear());
+  const optRoky=['<option value="">– všetky –</option>',...rokyAll.map(r=>`<option value="${r}"${r===aktRok?' selected':''}>${r}</option>`)].join('');
+  const mesiaceL=['Január','Február','Marec','Apríl','Máj','Jún','Júl','August','September','Október','November','December'];
+  const optMes=['<option value="">– všetky –</option>',...mesiaceL.map((m,i)=>`<option value="${String(i+1).padStart(2,'0')}">${m}</option>`)].join('');
 
-  // Výkon technikov
-  const techStats={};
-  MOCK_OBJ.forEach(o=>{
-    if(!o.zdroj) return;
-    if(!techStats[o.zdroj]) techStats[o.zdroj]={celkom:0,uzav:0,storno:0};
-    techStats[o.zdroj].celkom++;
-    if(o.farba==='zelena') techStats[o.zdroj].uzav++;
-    if(o.farba==='zlta') techStats[o.zdroj].storno++;
-  });
-
-  // Priemerná doba realizácie (dni od prijatia po realizáciu)
-  const realizovane=MOCK_OBJ.filter(o=>o.real&&o.prijatia);
-  let avgDni='N/A';
-  if(realizovane.length){
-    const sum=realizovane.reduce((acc,o)=>{
-      const diff=(new Date(o.real)-new Date(o.prijatia))/(1000*60*60*24);
-      return acc+(diff||0);
-    },0);
-    avgDni=(sum/realizovane.length).toFixed(1)+' dní';
-  }
-
-  const techHTML=Object.entries(techStats).sort((a,b)=>b[1].celkom-a[1].celkom).map(([t,s])=>`
-    <tr><td style="padding:5px 8px">${t}</td>
-    <td style="padding:5px 8px;text-align:center">${s.celkom}</td>
-    <td style="padding:5px 8px;text-align:center;color:#1b5e20">${s.uzav}</td>
-    <td style="padding:5px 8px;text-align:center;color:#c62828">${s.storno}</td>
-    <td style="padding:5px 8px;text-align:center">${s.celkom?Math.round(s.uzav/s.celkom*100)+'%':'-'}</td></tr>`).join('');
-
-  const w=window.open('','_blank','width=700,height:550');
-  w.document.write(`<!DOCTYPE html><html><head><title>Štatistiky DISPECING</title>
-  <style>body{font-family:Segoe UI,Arial,sans-serif;padding:20px;background:#f0f2f5}
-  h2{color:#1565c0}h3{color:#444;margin-top:20px}
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Štatistiky DISPECING</title>
+  <style>body{font-family:Segoe UI,Arial,sans-serif;padding:20px;background:#f0f2f5;margin:0}
+  h2{color:#1565c0;margin:0 0 10px}h3{color:#444;margin:18px 0 8px}
+  .filterbar{background:#fff;border-radius:8px;padding:12px 16px;margin-bottom:16px;box-shadow:0 1px 4px rgba(0,0,0,.1);display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+  .filterbar label{font-size:12px;color:#555;font-weight:600;margin-right:4px}
+  .filterbar select{padding:6px 10px;border:1px solid #c8cdd8;border-radius:6px;font-size:13px;background:#fff;cursor:pointer}
+  .filterbar .info{font-size:11px;color:#888;margin-left:auto}
   .karta{background:#fff;border-radius:8px;padding:16px;margin-bottom:16px;box-shadow:0 1px 4px rgba(0,0,0,.1)}
   .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
-  .val{font-size:32px;font-weight:700;color:#1565c0}.lbl{font-size:12px;color:#666}
-  table{border-collapse:collapse;width:100%}th{background:#1565c0;color:#fff;padding:6px 8px;text-align:left;font-size:12px}
-  tr:nth-child(even){background:#f5f5f5}</style></head>
-  <body><h2>📊 Štatistiky DISPECING – SUPTEL ŽILINA</h2>
-  <div class="grid">
-    <div class="karta"><div class="val">${totalAll}</div><div class="lbl">Celkom objednávok</div></div>
-    <div class="karta"><div class="val" style="color:#1b5e20">${uzav}</div><div class="lbl">Uzavreté</div></div>
-    <div class="karta"><div class="val" style="color:#c62828">${storno}</div><div class="lbl">Storno</div></div>
-    <div class="karta"><div class="val" style="color:#e65100">${otv}</div><div class="lbl">Otvorené</div></div>
+  .val{font-size:32px;font-weight:700;color:#1565c0;line-height:1}.lbl{font-size:12px;color:#666;margin-top:4px}
+  table{border-collapse:collapse;width:100%}
+  th{background:#1565c0;color:#fff;padding:6px 8px;text-align:left;font-size:12px}
+  td{padding:5px 8px;font-size:13px}
+  tr:nth-child(even){background:#f5f5f5}
+  .empty{padding:30px;text-align:center;color:#888;font-style:italic}</style></head>
+  <body>
+  <h2>📊 Štatistiky DISPECING – SUPTEL ŽILINA</h2>
+  <div class="filterbar">
+    <label>Rok:</label>
+    <select id="f-rok" onchange="render()">${optRoky}</select>
+    <label>Mesiac:</label>
+    <select id="f-mesiac" onchange="render()">${optMes}</select>
+    <span class="info" id="info"></span>
   </div>
-  <div class="karta"><strong>Priemerná doba realizácie:</strong> ${avgDni}</div>
-  <h3>Výkon technikov</h3>
-  <div class="karta"><table>
-  <thead><tr><th>Technik</th><th>Celkom</th><th>Uzavreté</th><th>Storno</th><th>Úspešnosť</th></tr></thead>
-  <tbody>${techHTML}</tbody></table></div>
+  <div id="content"></div>
+  <script>
+  function render(){
+    const rok=document.getElementById('f-rok').value;
+    const mes=document.getElementById('f-mesiac').value;
+    const all=(window.opener && window.opener.MOCK_OBJ) || [];
+    // Filter podľa prijatia (rok/mesiac)
+    const data=all.filter(o=>{
+      const p=o.prijatia||'';
+      if(rok && p.slice(0,4)!==rok) return false;
+      if(mes && p.slice(5,7)!==mes) return false;
+      return true;
+    });
+    const total=data.length;
+    const uzav=data.filter(o=>o.farba==='zelena').length;
+    const storno=data.filter(o=>o.farba==='zlta').length;
+    const otv=total-uzav-storno;
+    const realiz=data.filter(o=>o.real&&o.prijatia);
+    let avgDni='N/A';
+    if(realiz.length){
+      const sum=realiz.reduce((a,o)=>a+((new Date(o.real)-new Date(o.prijatia))/(1000*60*60*24)||0),0);
+      avgDni=(sum/realiz.length).toFixed(1)+' dní';
+    }
+    // Výkon technikov (len v rámci filtra)
+    const tech={};
+    data.forEach(o=>{
+      if(!o.zdroj)return;
+      if(!tech[o.zdroj])tech[o.zdroj]={celkom:0,uzav:0,storno:0};
+      tech[o.zdroj].celkom++;
+      if(o.farba==='zelena')tech[o.zdroj].uzav++;
+      if(o.farba==='zlta')tech[o.zdroj].storno++;
+    });
+    const techRows=Object.entries(tech).sort((a,b)=>b[1].celkom-a[1].celkom);
+    const techHTML=techRows.length?techRows.map(([t,s])=>
+      '<tr><td>'+t+'</td><td style="text-align:center">'+s.celkom+'</td>'+
+      '<td style="text-align:center;color:#1b5e20">'+s.uzav+'</td>'+
+      '<td style="text-align:center;color:#c62828">'+s.storno+'</td>'+
+      '<td style="text-align:center">'+(s.celkom?Math.round(s.uzav/s.celkom*100)+'%':'-')+'</td></tr>'
+    ).join(''):'<tr><td colspan="5" class="empty">Žiadni technici v tomto výbere</td></tr>';
+
+    // Filtrovaný popis
+    const mesNames=['','Január','Február','Marec','Apríl','Máj','Jún','Júl','August','September','Október','November','December'];
+    let popis='Všetky obdobia';
+    if(rok && mes) popis=mesNames[parseInt(mes,10)]+' '+rok;
+    else if(rok) popis='Rok '+rok;
+    else if(mes) popis=mesNames[parseInt(mes,10)]+' (všetky roky)';
+    document.getElementById('info').textContent='Obdobie: '+popis+' · Záznamov: '+total;
+
+    document.getElementById('content').innerHTML=
+      '<div class="grid">'+
+        '<div class="karta"><div class="val">'+total+'</div><div class="lbl">Celkom objednávok</div></div>'+
+        '<div class="karta"><div class="val" style="color:#1b5e20">'+uzav+'</div><div class="lbl">Uzavreté</div></div>'+
+        '<div class="karta"><div class="val" style="color:#c62828">'+storno+'</div><div class="lbl">Storno</div></div>'+
+        '<div class="karta"><div class="val" style="color:#e65100">'+otv+'</div><div class="lbl">Otvorené</div></div>'+
+      '</div>'+
+      '<div class="karta"><strong>Priemerná doba realizácie:</strong> '+avgDni+'</div>'+
+      '<h3>Výkon technikov</h3>'+
+      '<div class="karta"><table><thead><tr><th>Technik</th><th>Celkom</th><th>Uzavreté</th><th>Storno</th><th>Úspešnosť</th></tr></thead><tbody>'+techHTML+'</tbody></table></div>';
+  }
+  render();
+  <\/script>
   </body></html>`);
+  w.document.close();
 }
 
 // ════════════════════════════════════════════════════════════
