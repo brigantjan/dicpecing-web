@@ -1003,6 +1003,10 @@ function isNeplan(o){
 function onAddInput(el){
   el.value=el.value.toUpperCase();
   el.classList.toggle('add-a',el.value==='A');
+  // Re-trigger AI – hint sa preplánuje podľa ADD stavu (ovplyvňuje text "Daj prerezervovať!")
+  aiDone=false;
+  const h=document.getElementById('n-ai-hint'); if(h) h.style.display='none';
+  aiTrigger();
 }
 // quickFilter + searchLive musia byť pred renderObjTable
 let quickMode='all';
@@ -1544,6 +1548,8 @@ function aiTrigger(){
   const tc={};
   MOCK_OBJ.filter(o=>o.zdroj&&(!typ||o.typ.toLowerCase()===typ)).forEach(o=>tc[o.zdroj]=(tc[o.zdroj]||0)+1);
   const bestTech=Object.entries(tc).sort((a,b)=>b[1]-a[1])[0]?.[0]||'';
+  // ADD='A' rozhoduje, či má zmysel navrhovať prerezerváciu
+  const isAdd=((document.getElementById('n-add').value||'').trim().toUpperCase()==='A');
   // Výpočet návrhu
   const prDate=iso2date(prijatia);
   const ltDate=iso2date(lt);
@@ -1558,19 +1564,26 @@ function aiTrigger(){
     if(prev&&prev<=ltM1){suggPlan=prev;}
     else{suggPlan=nextPracovny(new Date(ltDate.getTime()+86400000));ltPrek=true;}
   }
+  // CLAMP: plán nikdy do minulosti – minimum je dnes (resp. najbližší pracovný deň od dneška)
+  // Rieši staré objednávky z minulosti, kde aj LT už uplynulo.
+  if(suggPlan<dnes){ suggPlan=nextPracovny(dnes); }
   aiDone=true;
   const planIso=date2iso(suggPlan);
   // Vždy prepíš plán
   document.getElementById('n-plan').value=planIso;
   // Technika len ak prázdny
   if(bestTech&&!document.getElementById('n-technik').value)document.getElementById('n-technik').value=bestTech;
-  // Hint
+  // Hint – návrh prerezervácie len ak ADD='A' (inak prerezervácia nemá zmysel)
   const hint=document.getElementById('n-ai-hint');
   hint.style.display='block';
   hint.className='ai-hint '+(ltPrek?'warn':'ok');
-  hint.innerHTML=ltPrek
-    ?`⚠ AI návrh → ${bestTech||'–'} | ${fmtD(planIso)} ⚠ <strong>Nesplnenie LT – Daj prerezervovať!</strong>`
-    :`💡 AI návrh → ${bestTech||'–'} | ${fmtD(planIso)} (predvyplnené – môžete prepísať)`;
+  if(ltPrek){
+    hint.innerHTML = isAdd
+      ? `⚠ AI návrh → ${bestTech||'–'} | ${fmtD(planIso)} ⚠ <strong>Nesplnenie LT – Daj prerezervovať!</strong>`
+      : `⚠ AI návrh → ${bestTech||'–'} | ${fmtD(planIso)} ⚠ <strong>Plán po LT</strong> (bez prerezervácie – ADD nie je „A")`;
+  } else {
+    hint.innerHTML = `💡 AI návrh → ${bestTech||'–'} | ${fmtD(planIso)} (predvyplnené – môžete prepísať)`;
+  }
 }
 
 // ID duplicita
@@ -1938,8 +1951,15 @@ function emailPrerezerv(){
   body+=`— DISPEČERSKÝ SYSTÉM ZRIADOVANIE · SUPTEL ŽILINA`;
   const predmet=encodeURIComponent('Po LT - pre-rezervovanie objednávok ADD');
   const teloPre=encodeURIComponent(body);
-  // Otvor reálny mailový klient
-  window.location.href=`mailto:?subject=${predmet}&body=${teloPre}`;
+  // Otvor reálny mailový klient – cez dynamický <a>.click() rešpektuje OS default mail handler.
+  // (window.location.href='mailto:...' v Edge/Chrome niekedy routuje do nového Outlooku web.
+  //  Tento prístup spoľahlivo otvorí klasický Outlook, ak je nastavený ako default.)
+  const a=document.createElement('a');
+  a.href=`mailto:?subject=${predmet}&body=${teloPre}`;
+  a.style.display='none';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(()=>{ if(a.parentNode) a.parentNode.removeChild(a); },0);
   // Označ email odoslaný + uloží do API
   prChecked.forEach(id=>{
     const oi=MOCK_OBJ.findIndex(x=>x.id_obj===id);
@@ -2404,13 +2424,22 @@ function exportExcel(){
 function otvorHromadnaZmena(){
   const datum=document.getElementById('p-datum').value;
   if(!datum){toast('⚠ Najprv vyberte dátum v Dennom pláne');return;}
-  // Naplň selecty technikami z daného dňa
-  const technikovia=[...new Set(MOCK_OBJ.filter(o=>o.plan===datum&&!o.real&&o.farba!=='zlta').map(o=>o.zdroj).filter(Boolean))].sort();
-  if(!technikovia.length){toast('⚠ V Dennom pláne nie sú žiadne objednávky pre daný deň');return;}
-  const vsetciTech=[...new Set([...technikovia,...TECHNICI])].sort();
-  const opts=vsetciTech.map(t=>`<option>${t}</option>`).join('');
-  document.getElementById('hz-z').innerHTML='<option value="">– vyberte –</option>'+opts;
-  document.getElementById('hz-na').innerHTML='<option value="">– vyberte –</option>'+opts;
+  // "Z technika" – musí mať v daný deň aspoň jednu objednávku (inak nie je čo preraďovať)
+  const technikoviaDna=[...new Set(MOCK_OBJ.filter(o=>o.plan===datum&&!o.real&&o.farba!=='zlta').map(o=>o.zdroj).filter(Boolean))].sort();
+  if(!technikoviaDna.length){toast('⚠ V Dennom pláne nie sú žiadne objednávky pre daný deň');return;}
+  // "Na technika" – VŠETCI evidovaní v systéme. Kombinácia 4 zdrojov pre maximálnu spoľahlivosť:
+  //  1) TECHNICI z /api/technici (primárny zdroj, môže byť prázdny pri race condition)
+  //  2) DEMO_USERS s rolou 'technik' (fallback z /api/users)
+  //  3) všetky uniq zdroje z MOCK_OBJ (zachytí aj historických technikov mimo users)
+  //  4) technikoviaDna (vždy obsiahnutí)
+  const fromUsers=(DEMO_USERS||[]).filter(u=>u.rola==='technik').map(u=>u.technik_meno||u.meno).filter(Boolean);
+  const fromMockAll=[...new Set(MOCK_OBJ.map(o=>o.zdroj).filter(Boolean))];
+  const vsetciTech=[...new Set([...(TECHNICI||[]),...fromUsers,...fromMockAll,...technikoviaDna])].sort();
+  // Z technika = obmedzene; Na technika = všetci
+  const optsZ =technikoviaDna.map(t=>`<option>${t}</option>`).join('');
+  const optsNa=vsetciTech    .map(t=>`<option>${t}</option>`).join('');
+  document.getElementById('hz-z').innerHTML='<option value="">– vyberte –</option>'+optsZ;
+  document.getElementById('hz-na').innerHTML='<option value="">– vyberte –</option>'+optsNa;
   document.getElementById('hz-preview').textContent='';
   document.getElementById('hromadna-overlay').classList.add('open');
   // Live preview
