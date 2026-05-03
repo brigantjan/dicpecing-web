@@ -732,6 +732,39 @@ body[data-role="technik"] #page5 { display:flex!important; flex-direction:column
 </div>
 </div>
 
+<!-- MESAČNÝ VÝKAZ MODAL -->
+<div class="modal-overlay" id="mvyk-overlay" onclick="closeMvyk(event)">
+<div class="modal" style="max-width:440px" onclick="event.stopPropagation()">
+  <div class="modal-hdr">
+    <h3>📋 Mesačný výkaz technika</h3>
+    <button class="btn btn-outline btn-xs" onclick="closeMvyk()">✕</button>
+  </div>
+  <div style="padding:18px">
+    <div class="field" style="margin-bottom:12px">
+      <label>Technik</label>
+      <select id="mv-tech" style="width:100%;padding:8px;border:1px solid var(--border2);border-radius:6px">
+        <option value="">– Všetci technici –</option>
+      </select>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+      <div class="field" style="margin:0">
+        <label>Rok</label>
+        <select id="mv-rok" style="width:100%;padding:8px;border:1px solid var(--border2);border-radius:6px"></select>
+      </div>
+      <div class="field" style="margin:0">
+        <label>Mesiac</label>
+        <select id="mv-mes" style="width:100%;padding:8px;border:1px solid var(--border2);border-radius:6px"></select>
+      </div>
+    </div>
+    <div id="mv-preview" style="font-size:11px;color:var(--muted);min-height:18px;margin:6px 0"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
+      <button class="btn btn-outline" onclick="closeMvyk()">Zrušiť</button>
+      <button class="btn btn-accent" onclick="potvrdMvyk()">📥 Generovať Excel</button>
+    </div>
+  </div>
+</div>
+</div>
+
 <!-- EDIT MODAL -->
 <div class="modal-overlay" id="edit-overlay" onclick="closeEditIfBg(event)">
 <div class="modal">
@@ -2671,23 +2704,58 @@ async function zobrazHistoriu(id_obj){
 // ZMENA 4+5: MESAČNÝ VÝKAZ + ŠTATISTIKY (záložka Nenaplánované → tlačidlá)
 // ════════════════════════════════════════════════════════════
 function exportMesacnyVykaz(){
-  // Dialóg: vyber technika a mesiac
-  const techVyber=TECHNICI.length?TECHNICI.map(t=>`<option>${t}</option>`).join(''):'';
-  const mesVyber=['2026-01','2026-02','2026-03','2026-04','2026-05','2026-06',
-    '2026-07','2026-08','2026-09','2026-10','2026-11','2026-12']
-    .map(m=>`<option${m===T.slice(0,7)?' selected':''}>${m}</option>`).join('');
-  const w=window.open('','_blank','width=500,height:340');
-  w.document.write(`<!DOCTYPE html><html><head><title>Mesačný výkaz</title>
-  <style>body{font-family:Segoe UI,Arial,sans-serif;padding:24px;background:#f0f2f5}
-  label{display:block;margin-top:12px;font-size:13px;font-weight:600;color:#333}
-  select,button{width:100%;padding:8px;margin-top:4px;border:1px solid #ccc;border-radius:6px;font-size:13px}
-  button{background:#1565c0;color:#fff;cursor:pointer;margin-top:16px;padding:10px}
-  h3{color:#1565c0}</style></head>
-  <body><h3>📊 Mesačný výkaz technika</h3>
-  <label>Technik</label><select id="mv-tech"><option value="">Všetci</option>${techVyber}</select>
-  <label>Mesiac</label><select id="mv-mes">${mesVyber}</select>
-  <button onclick="window.opener.generujVykaz(document.getElementById('mv-tech').value,document.getElementById('mv-mes').value);window.close()">📥 Generovať Excel</button>
-  </body></html>`);
+  // Technici – 4 zdroje (rovnako ako fillMobTechnik) aby sme videli VŠETKÝCH evidovaných
+  const fromUsers=(DEMO_USERS||[]).filter(u=>u.rola==='technik').map(u=>u.technik_meno||u.meno).filter(Boolean);
+  const fromMockAll=[...new Set(MOCK_OBJ.map(o=>o.zdroj).filter(Boolean))];
+  const all=[...new Set([...(TECHNICI||[]),...fromUsers,...fromMockAll])].sort();
+  const techHTML='<option value="">– Všetci technici –</option>'+all.map(t=>`<option>${t}</option>`).join('');
+  // Roky – dynamicky z dostupných objednávok + aktuálny rok pre istotu
+  const aktRok=String(new Date().getFullYear());
+  const rokySet=new Set(MOCK_OBJ.map(o=>(o.prijatia||o.plan||'').slice(0,4)).filter(Boolean));
+  rokySet.add(aktRok);
+  const rokyHTML=[...rokySet].sort().map(r=>`<option value="${r}"${r===aktRok?' selected':''}>${r}</option>`).join('');
+  // Mesiace
+  const mesiaceL=['Január','Február','Marec','Apríl','Máj','Jún','Júl','August','September','Október','November','December'];
+  const aktMes=String(new Date().getMonth()+1).padStart(2,'0');
+  const mesHTML=mesiaceL.map((m,i)=>{
+    const v=String(i+1).padStart(2,'0');
+    return `<option value="${v}"${v===aktMes?' selected':''}>${m}</option>`;
+  }).join('');
+
+  document.getElementById('mv-tech').innerHTML=techHTML;
+  document.getElementById('mv-rok').innerHTML=rokyHTML;
+  document.getElementById('mv-mes').innerHTML=mesHTML;
+  document.getElementById('mv-preview').textContent='';
+  document.getElementById('mvyk-overlay').classList.add('open');
+  // Live preview počtu objednávok
+  const upd=()=>{
+    const t=document.getElementById('mv-tech').value;
+    const r=document.getElementById('mv-rok').value;
+    const m=document.getElementById('mv-mes').value;
+    const cnt=MOCK_OBJ.filter(o=>{
+      const d=(o.plan||o.prijatia||'');
+      if(d.slice(0,4)!==r) return false;
+      if(d.slice(5,7)!==m) return false;
+      if(t&&o.zdroj!==t) return false;
+      return true;
+    }).length;
+    document.getElementById('mv-preview').textContent=cnt
+      ? `Pre výber: ${cnt} objednávok`
+      : 'Pre výber nie sú žiadne objednávky';
+  };
+  ['mv-tech','mv-rok','mv-mes'].forEach(id=>document.getElementById(id).onchange=upd);
+  upd();
+}
+function closeMvyk(ev){
+  if(ev && ev.target!==ev.currentTarget) return;
+  document.getElementById('mvyk-overlay').classList.remove('open');
+}
+function potvrdMvyk(){
+  const technik=document.getElementById('mv-tech').value;
+  const rok=document.getElementById('mv-rok').value;
+  const mes=document.getElementById('mv-mes').value;
+  document.getElementById('mvyk-overlay').classList.remove('open');
+  generujVykaz(technik, rok+'-'+mes);
 }
 
 function generujVykaz(technik,mesiac){
