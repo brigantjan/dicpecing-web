@@ -247,6 +247,13 @@ body[data-role="technik"] .tabbar,
 body[data-role="technik"] #statusbar,
 body[data-role="technik"] .dash-section,
 body[data-role="technik"] #notif-btn { display:none!important }
+/* Mobile dropdown – rozbalené <option> musia mať tmavý text na bielom pozadí.
+   Inak sa color:#fff zo selectu prenesie aj do options a v rozbalenom popupe
+   (ktoré je biele) sú mená neviditeľné kým nie sú highlighted. */
+#mob-tech option,
+#mob-tech optgroup{ color:#1a1d23!important; background:#fff!important; font-weight:500 }
+#mob-tech option:checked,
+#mob-tech option:hover{ background:#e3f0ff!important; color:#0d47a1!important }
 body[data-role="technik"] .tab-page { display:none!important }
 body[data-role="technik"] #page5 { display:flex!important; flex-direction:column!important }
 #app.technik-mode .sidebar,
@@ -1260,10 +1267,27 @@ function initApp(){
   // Technik – auto-výber vlastného mena a presmerovanie na Mobil
   if(rola==='technik'&&currentUser.technik_meno){
     const sel=document.getElementById('mob-tech');
+    // Zaisti že option pre tohto technika existuje (aj keď /api/technici nepridá Poštulku)
+    if(!Array.from(sel.options).some(o=>o.value===currentUser.technik_meno)){
+      const opt=document.createElement('option');
+      opt.value=currentUser.technik_meno; opt.textContent=currentUser.technik_meno;
+      sel.appendChild(opt);
+    }
     sel.value=currentUser.technik_meno;
     sel.disabled=true; // technik nemôže prepínať na iného
     switchTab(5);
     renderMobil();
+  } else if(rola==='technik'&&!currentUser.technik_meno){
+    // Technik bez nastaveného technik_meno – varovanie a kontakt admina
+    switchTab(5);
+    document.getElementById('mob-tech').disabled=true;
+    document.getElementById('mob-list').innerHTML=
+      '<div style="text-align:center;padding:30px 20px;color:var(--red);background:var(--red-bg);border-radius:8px;margin:20px 12px">'+
+      '<div style="font-size:40px;margin-bottom:12px">⚠️</div>'+
+      '<div style="font-size:15px;font-weight:700;margin-bottom:8px">Účet nie je správne nastavený</div>'+
+      '<div style="font-size:13px;line-height:1.5">Vášmu účtu chýba pole <strong>technik_meno</strong>.<br>Kontaktujte prosím administrátora, aby ho vyplnil v Správe používateľov.</div>'+
+      '</div>';
+    document.getElementById('mob-sum').textContent='Účet nedokončený';
   } else if(rola==='operátor'){
     switchTab(1);
     renderObjTable();
@@ -1979,35 +2003,95 @@ function prToggle(ev,id){ev.stopPropagation();const td=ev.currentTarget;if(prChe
 function emailPrerezerv(){
   if(!prChecked.size){toast('⚠ Označte aspoň jednu objednávku (kliknite ☐).');return;}
   const rows=MOCK_OBJ.filter(o=>prChecked.has(o.id_obj));
-  // Zostavi text emailu
-  let body=`Dobrý deň,\n\nzasielame zoznam objednávok ADD s plánovaným termínom realizácie po dátume LT:\n\n`;
-  rows.forEach(o=>{
-    body+=`ID: ${o.id_obj} | ${o.meno} | ${o.adresa} | Typ: ${o.typ} | Balík: ${o.balik}\n`;
-    body+=`  Príjem: ${fmtD(o.prijatia)} | Plán: ${fmtD(o.plan)} | LT: ${fmtD(o.lt)} | Technik: ${o.zdroj||'-'}\n`;
-    if(o.pozn) body+=`  Poznámky: ${o.pozn}\n`;
-    body+='\n';
-  });
-  body+=`— DISPEČERSKÝ SYSTÉM ZRIADOVANIE · SUPTEL ŽILINA`;
   const subject='Po LT - pre-rezervovanie objednávok ADD';
 
-  // ─── Otvorenie v STAROM Outlook cez stiahnutie .eml súboru ─────────────
-  // Prečo .eml a nie mailto:
-  //   – mailto: handler v Edge/Chrome býva unesený (web Outlook / nový Outlook),
-  //     a to aj keď user nemá nový Outlook nainštalovaný.
-  //   – .eml súbor má v Office prostredí pevnú asociáciu = klasický Outlook.
-  //   – X-Unsent: 1 hlavička dáva Outlook pokyn otvoriť ho ako nový draft
-  //     (vyplnený formulár pripravený na Send), nie ako prečítanú správu.
-  //   – Funguje aj keď je v OS default mail klient nastavený zle.
+  // Plain-text verzia (fallback pre klientov bez HTML podpory)
+  let bodyTxt=`Dobrý deň,\n\nzasielame zoznam objednávok ADD s plánovaným termínom realizácie po dátume LT:\n\n`;
+  rows.forEach(o=>{
+    bodyTxt+=`ID: ${o.id_obj} | ${o.meno} | ${o.adresa} | Typ: ${o.typ} | Balík: ${o.balik}\n`;
+    bodyTxt+=`  Príjem: ${fmtD(o.prijatia)} | Plán: ${fmtD(o.plan)} | LT: ${fmtD(o.lt)} | Technik: ${o.zdroj||'-'}\n`;
+    if(o.pozn) bodyTxt+=`  Poznámky: ${o.pozn}\n`;
+    bodyTxt+='\n';
+  });
+  bodyTxt+=`— DISPEČERSKÝ SYSTÉM ZRIADOVANIE · SUPTEL ŽILINA`;
+
+  // HTML verzia – tabuľka identická referenčnému obrázku
+  const esc=s=>String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const trs=rows.map(o=>`
+    <tr>
+      <td style="padding:6px 10px;border:1px solid #d0d7e2;font-family:Consolas,monospace">${esc(o.id_obj)}</td>
+      <td style="padding:6px 10px;border:1px solid #d0d7e2">${esc(o.meno)}</td>
+      <td style="padding:6px 10px;border:1px solid #d0d7e2">${esc(o.adresa)}</td>
+      <td style="padding:6px 10px;border:1px solid #d0d7e2">${esc(o.typ)}</td>
+      <td style="padding:6px 10px;border:1px solid #d0d7e2">${esc(o.balik)}</td>
+      <td style="padding:6px 10px;border:1px solid #d0d7e2">${esc(fmtD(o.prijatia))}</td>
+      <td style="padding:6px 10px;border:1px solid #d0d7e2">${esc(fmtD(o.real))}</td>
+      <td style="padding:6px 10px;border:1px solid #d0d7e2;color:#c62828;font-weight:700">${esc(fmtD(o.plan))}</td>
+      <td style="padding:6px 10px;border:1px solid #d0d7e2">${esc(o.zdroj||'')}</td>
+      <td style="padding:6px 10px;border:1px solid #d0d7e2">${esc(fmtD(o.lt))}</td>
+      <td style="padding:6px 10px;border:1px solid #d0d7e2;text-align:center">${esc(o.add_txt||'')}</td>
+      <td style="padding:6px 10px;border:1px solid #d0d7e2">${esc(o.pozn||'')}</td>
+    </tr>`).join('');
+  const bodyHtml=`<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="font-family:Calibri,Segoe UI,Arial,sans-serif;font-size:14px;color:#1a1d23">
+<p>Dobrý deň,</p>
+<p>zasielame zoznam objednávok ADD, ktoré majú plánovaný termín realizácie <strong>po dátume LT</strong>:</p>
+<table cellpadding="0" cellspacing="0" style="border-collapse:collapse;font-size:13px;font-family:Calibri,Segoe UI,Arial,sans-serif">
+  <thead>
+    <tr>
+      <th style="padding:8px 10px;background:#1565c0;color:#fff;text-align:left;border:1px solid #0d47a1">ID objednávky</th>
+      <th style="padding:8px 10px;background:#1565c0;color:#fff;text-align:left;border:1px solid #0d47a1">Meno</th>
+      <th style="padding:8px 10px;background:#1565c0;color:#fff;text-align:left;border:1px solid #0d47a1">Adresa</th>
+      <th style="padding:8px 10px;background:#1565c0;color:#fff;text-align:left;border:1px solid #0d47a1">Typ</th>
+      <th style="padding:8px 10px;background:#1565c0;color:#fff;text-align:left;border:1px solid #0d47a1">Typ balíka</th>
+      <th style="padding:8px 10px;background:#1565c0;color:#fff;text-align:left;border:1px solid #0d47a1">Dátum prijatia</th>
+      <th style="padding:8px 10px;background:#1565c0;color:#fff;text-align:left;border:1px solid #0d47a1">Dátum realizácie</th>
+      <th style="padding:8px 10px;background:#1565c0;color:#fff;text-align:left;border:1px solid #0d47a1">Plánovaný dátum</th>
+      <th style="padding:8px 10px;background:#1565c0;color:#fff;text-align:left;border:1px solid #0d47a1">Technik</th>
+      <th style="padding:8px 10px;background:#1565c0;color:#fff;text-align:left;border:1px solid #0d47a1">LT</th>
+      <th style="padding:8px 10px;background:#1565c0;color:#fff;text-align:left;border:1px solid #0d47a1">ADD</th>
+      <th style="padding:8px 10px;background:#1565c0;color:#fff;text-align:left;border:1px solid #0d47a1">Poznámky</th>
+    </tr>
+  </thead>
+  <tbody>${trs}</tbody>
+</table>
+<p style="color:#888;font-size:11px;margin-top:18px">— DISPEČERSKÝ SYSTÉM ZRIADOVANIE · SUPTEL ŽILINA</p>
+</body></html>`;
+
+  // .eml multipart/alternative – Outlook si vyberie HTML časť a otvorí krásnu tabuľku
+  // X-Unsent: 1 → Outlook ho otvorí ako NEODOSLANÝ DRAFT (formulár pripravený na Send)
+  // Asociácia .eml v Office = klasický Outlook → obíde mailto: handler ktorý unáša Edge.
   const utf8Subject='=?utf-8?B?'+btoa(unescape(encodeURIComponent(subject)))+'?=';
+  const boundary='----=_NextPart_'+Date.now().toString(36);
+  // Base64 enkódovanie pre 8-bit safe transport (UTF-8 znaky ako á, č, š)
+  const b64=s=>{
+    const utf8=unescape(encodeURIComponent(s));
+    return btoa(utf8).match(/.{1,76}/g).join('\r\n');
+  };
   const emlContent=[
     'X-Unsent: 1',
     'To: ',
     'Subject: '+utf8Subject,
-    'Content-Type: text/plain; charset=utf-8',
-    'Content-Transfer-Encoding: 8bit',
+    'MIME-Version: 1.0',
+    'Content-Type: multipart/alternative; boundary="'+boundary+'"',
     '',
-    body
+    'This is a multi-part message in MIME format.',
+    '',
+    '--'+boundary,
+    'Content-Type: text/plain; charset=utf-8',
+    'Content-Transfer-Encoding: base64',
+    '',
+    b64(bodyTxt),
+    '',
+    '--'+boundary,
+    'Content-Type: text/html; charset=utf-8',
+    'Content-Transfer-Encoding: base64',
+    '',
+    b64(bodyHtml),
+    '',
+    '--'+boundary+'--',
+    ''
   ].join('\r\n');
+
   const blob=new Blob([emlContent],{type:'message/rfc822'});
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');
@@ -2017,6 +2101,7 @@ function emailPrerezerv(){
   document.body.appendChild(a);
   a.click();
   setTimeout(()=>{ URL.revokeObjectURL(url); if(a.parentNode) a.parentNode.removeChild(a); },1500);
+
   // Označ email odoslaný + uloží do API
   prChecked.forEach(id=>{
     const oi=MOCK_OBJ.findIndex(x=>x.id_obj===id);
@@ -2028,7 +2113,7 @@ function emailPrerezerv(){
   });
   prChecked.clear();
   setTimeout(showPrerezerv,400);
-  toast('✓ Email pripravený – kliknite na stiahnutý .eml súbor v lište prehliadača (otvorí sa starý Outlook)');
+  toast('✓ Email s tabuľkou pripravený – kliknite na stiahnutý .eml súbor (otvorí sa Outlook s vyplnenou tabuľkou)');
 }
 
 // ════════════════════════════════════════════════════════════
@@ -2308,6 +2393,15 @@ function togglePass(idx){showPass[idx]=!showPass[idx];renderUserTable();}
 function updateUser(idx,field,val){
   if(idx>=DEMO_USERS.length) return;
   DEMO_USERS[idx][field]=val;
+  // Smart default: pri zmene role na 'technik' ak je technik_meno prázdny,
+  // automaticky predplniť z poľa meno (admin to môže neskôr prepísať).
+  // Týmto sa zaistí, že technik po prihlásení bude mať filter ?zdroj=meno
+  // a v dropdowne sa zobrazí; bez tohto by mal prázdny technik_meno = nefunkčný login.
+  let autoTechMeno=null;
+  if(field==='rola' && val==='technik' && !DEMO_USERS[idx].technik_meno && DEMO_USERS[idx].meno){
+    DEMO_USERS[idx].technik_meno=DEMO_USERS[idx].meno;
+    autoTechMeno=DEMO_USERS[idx].meno;
+  }
   if(field==='rola'||field==='technik_meno'||field==='meno'){
     // Refresh všetkých technik dropdownov, aby zmena/vznik nového technika bola hneď vidieť
     renderUserTable();
@@ -2324,9 +2418,11 @@ function updateUser(idx,field,val){
   else if(['meno','email','technik_meno','ini','imap_server','imap_email','imap_heslo'].includes(field))
     payload[field]=val;
   else return; // neznáme pole
+  // Ak sme automaticky doplnili technik_meno, pošleme ho do API spolu s rolou
+  if(autoTechMeno) payload.technik_meno=autoTechMeno;
   console.log('PATCH user',u._id, payload);
   api('PATCH',`/api/users/${u._id}`,payload)
-    .then(()=>toast('✓ Uložené'))
+    .then(()=>toast(autoTechMeno?'✓ Uložené (technik_meno predvyplnený)':'✓ Uložené'))
     .catch(e=>toast('⚠ Chyba uloženia: '+e.message));
 }
 
@@ -2721,7 +2817,7 @@ function _exportDoExcelu({cols, dataRows, nazovListu, subor, sumarika}){
 // ZMENA 5: ŠTATISTIKY
 // ════════════════════════════════════════════════════════════
 function zobrazStatistiky(){
-  // Otvor okno – obsah generujeme dynamicky cez JS, dáta čerpáme z parenta
+  // Otvor okno – obsah generujeme dynamicky cez JS, dáta vkladáme INLINE do HTML
   const w=window.open('','_blank','width=820,height=640');
   if(!w){toast('⚠ Otváranie okna bolo zablokované prehliadačom');return;}
   // Predpočítané: dostupné roky z prijatia
@@ -2730,6 +2826,13 @@ function zobrazStatistiky(){
   const optRoky=['<option value="">– všetky –</option>',...rokyAll.map(r=>`<option value="${r}"${r===aktRok?' selected':''}>${r}</option>`)].join('');
   const mesiaceL=['Január','Február','Marec','Apríl','Máj','Jún','Júl','August','September','Október','November','December'];
   const optMes=['<option value="">– všetky –</option>',...mesiaceL.map((m,i)=>`<option value="${String(i+1).padStart(2,'0')}">${m}</option>`)].join('');
+
+  // Dáta inline – cez window.opener nefunguje (browser security).
+  // Posielame len fields ktoré stats potrebujú – kompaktnejšie ako celé objekty.
+  const slimData=MOCK_OBJ.map(o=>({
+    p:o.prijatia||'', r:o.real||'', f:o.farba||'', z:o.zdroj||''
+  }));
+  const dataJSON=JSON.stringify(slimData);
 
   w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Štatistiky DISPECING</title>
   <style>body{font-family:Segoe UI,Arial,sans-serif;padding:20px;background:#f0f2f5;margin:0}
@@ -2757,51 +2860,50 @@ function zobrazStatistiky(){
   </div>
   <div id="content"></div>
   <script>
+  // Dáta sa vkladajú inline pri generovaní okna (window.opener nie je dostupný v moderných browseroch)
+  var STATS_DATA = ${dataJSON};
   function render(){
-    const rok=document.getElementById('f-rok').value;
-    const mes=document.getElementById('f-mesiac').value;
-    const all=(window.opener && window.opener.MOCK_OBJ) || [];
-    // Filter podľa prijatia (rok/mesiac)
-    const data=all.filter(o=>{
-      const p=o.prijatia||'';
+    var rok=document.getElementById('f-rok').value;
+    var mes=document.getElementById('f-mesiac').value;
+    var data=STATS_DATA.filter(function(o){
+      var p=o.p||'';
       if(rok && p.slice(0,4)!==rok) return false;
       if(mes && p.slice(5,7)!==mes) return false;
       return true;
     });
-    const total=data.length;
-    const uzav=data.filter(o=>o.farba==='zelena').length;
-    const storno=data.filter(o=>o.farba==='zlta').length;
-    const otv=total-uzav-storno;
-    const realiz=data.filter(o=>o.real&&o.prijatia);
-    let avgDni='N/A';
+    var total=data.length;
+    var uzav=data.filter(function(o){return o.f==='zelena';}).length;
+    var storno=data.filter(function(o){return o.f==='zlta';}).length;
+    var otv=total-uzav-storno;
+    var realiz=data.filter(function(o){return o.r&&o.p;});
+    var avgDni='N/A';
     if(realiz.length){
-      const sum=realiz.reduce((a,o)=>a+((new Date(o.real)-new Date(o.prijatia))/(1000*60*60*24)||0),0);
+      var sum=realiz.reduce(function(a,o){return a+((new Date(o.r)-new Date(o.p))/(1000*60*60*24)||0);},0);
       avgDni=(sum/realiz.length).toFixed(1)+' dní';
     }
-    // Výkon technikov (len v rámci filtra)
-    const tech={};
-    data.forEach(o=>{
-      if(!o.zdroj)return;
-      if(!tech[o.zdroj])tech[o.zdroj]={celkom:0,uzav:0,storno:0};
-      tech[o.zdroj].celkom++;
-      if(o.farba==='zelena')tech[o.zdroj].uzav++;
-      if(o.farba==='zlta')tech[o.zdroj].storno++;
+    var tech={};
+    data.forEach(function(o){
+      if(!o.z)return;
+      if(!tech[o.z])tech[o.z]={celkom:0,uzav:0,storno:0};
+      tech[o.z].celkom++;
+      if(o.f==='zelena')tech[o.z].uzav++;
+      if(o.f==='zlta')tech[o.z].storno++;
     });
-    const techRows=Object.entries(tech).sort((a,b)=>b[1].celkom-a[1].celkom);
-    const techHTML=techRows.length?techRows.map(([t,s])=>
-      '<tr><td>'+t+'</td><td style="text-align:center">'+s.celkom+'</td>'+
-      '<td style="text-align:center;color:#1b5e20">'+s.uzav+'</td>'+
-      '<td style="text-align:center;color:#c62828">'+s.storno+'</td>'+
-      '<td style="text-align:center">'+(s.celkom?Math.round(s.uzav/s.celkom*100)+'%':'-')+'</td></tr>'
-    ).join(''):'<tr><td colspan="5" class="empty">Žiadni technici v tomto výbere</td></tr>';
+    var techRows=Object.keys(tech).map(function(t){return [t,tech[t]];}).sort(function(a,b){return b[1].celkom-a[1].celkom;});
+    var techHTML=techRows.length?techRows.map(function(p){
+      var t=p[0],s=p[1];
+      return '<tr><td>'+t+'</td><td style="text-align:center">'+s.celkom+'</td>'+
+        '<td style="text-align:center;color:#1b5e20">'+s.uzav+'</td>'+
+        '<td style="text-align:center;color:#c62828">'+s.storno+'</td>'+
+        '<td style="text-align:center">'+(s.celkom?Math.round(s.uzav/s.celkom*100)+'%':'-')+'</td></tr>';
+    }).join(''):'<tr><td colspan="5" class="empty">Žiadni technici v tomto výbere</td></tr>';
 
-    // Filtrovaný popis
-    const mesNames=['','Január','Február','Marec','Apríl','Máj','Jún','Júl','August','September','Október','November','December'];
-    let popis='Všetky obdobia';
+    var mesNames=['','Január','Február','Marec','Apríl','Máj','Jún','Júl','August','September','Október','November','December'];
+    var popis='Všetky obdobia';
     if(rok && mes) popis=mesNames[parseInt(mes,10)]+' '+rok;
     else if(rok) popis='Rok '+rok;
     else if(mes) popis=mesNames[parseInt(mes,10)]+' (všetky roky)';
-    document.getElementById('info').textContent='Obdobie: '+popis+' · Záznamov: '+total;
+    document.getElementById('info').textContent='Obdobie: '+popis+' · Záznamov: '+total+' / '+STATS_DATA.length+' celkom';
 
     document.getElementById('content').innerHTML=
       '<div class="grid">'+
