@@ -1210,9 +1210,43 @@ function quickFilter(mode){
   document.querySelectorAll('.quick-btn').forEach(b=>b.classList.remove('active'));
   const btn=document.getElementById('qb-'+mode);
   if(btn) btn.classList.add('active');
+  // Vždy resetuj modálny datumFilter (z Po-LT badge alebo dátum-filter modal).
+  // Tento filter je modálny stav, nie perzistentný – nemá zostávať medzi quick-klikmi.
+  datumFilter={stlpec:'',od:'',do:''};
+  document.querySelectorAll('[id^="df-btn-"]').forEach(b=>b.style.color='');
+  // 'all' = úplný reset všetkých filtrov („Všetky" znamená nulový filter).
+  if(mode==='all'){
+    const sq=document.getElementById('s-query'); if(sq) sq.value='';
+    ['f-id','f-meno','f-adresa','f-pozn'].forEach(id=>{const e=document.getElementById(id); if(e) e.value='';});
+    ['prij','real','plan','lt'].forEach(c=>{
+      const t=document.getElementById('f-'+c);   if(t) t.value='';
+      const d=document.getElementById('f-'+c+'-d'); if(d) d.value='';
+    });
+    ['f-typ','f-balik','f-dolt','f-add'].forEach(id=>{const e=document.getElementById(id); if(e) e.value='';});
+    // Multi-select technikov – zaškrtni "Všetci"
+    const all=document.getElementById('ms-all');
+    if(all && !all.checked){ all.checked=true; if(typeof msSelectAll==='function') msSelectAll(all); }
+  }
   renderObjTable();
 }
 function searchLive(){clearTimeout(_sTimer);_sTimer=setTimeout(renderObjTable,300);}
+// Dashboard click → úplný reset všetkých filtrov + nastav quick mód.
+// Toto zaisťuje že počet v karte (napr. „Oneskorených: 1") sa vždy zhoduje
+// s počtom riadkov v tabuľke po kliknutí. Bez tohto by reziduálne stĺpcové
+// filtre (meno, technik, ADD, ...) prebíjali výber a ukazovali menej.
+function dashClickFilter(mode){
+  switchTab(1);
+  // Najprv úplný reset (ako keby user klikol "Všetky")
+  quickFilter('all');
+  // Potom prepni quick mód na požadovaný typ
+  if(mode!=='all'){
+    quickMode=mode;
+    document.querySelectorAll('.quick-btn').forEach(b=>b.classList.remove('active'));
+    const btn=document.getElementById('qb-'+mode);
+    if(btn) btn.classList.add('active');
+    renderObjTable();
+  }
+}
 // oneskorená = plan v minulosti, bez realizácie, nie storno
 function isOneskoren(o){return o.plan&&o.plan<T&&!o.real&&o.farba!=='zlta'&&o.farba!=='zelena';}
 // Po LT = LT v minulosti, bez realizácie, nie storno (varovný indikátor v topbare)
@@ -1228,15 +1262,22 @@ function updatePoLtBadge(){
   else      badge.classList.remove('visible');
 }
 function quickFilterPoLt(){
-  // Klik na badge → prepni do Objednávok a aplikuj filter LT < dnes (cez rozšírený dátumový filter)
+  // Klik na badge → prepni do Objednávok a zobraz PRESNE počet z badge.
+  // Robíme úplný reset stĺpcových filtrov (cez quickFilter('all')), nastavíme quick mód
+  // 'neukoncene' bez prerenderu, a aplikujeme datumFilter LT < dnes. Takto sa počet
+  // v badge zhoduje s počtom riadkov v tabuľke.
   switchTab(1);
-  // Reset všetkých quick módov a označ "neukončené"
-  quickFilter('neukoncene');
-  // Použi rozšírený dátumový filter: LT do (dnes-1)
+  quickFilter('all'); // úplný reset
+  // Teraz nastav 'neukoncene' bez prerenderu (urobíme jeden render až po datumFilter)
+  quickMode='neukoncene';
+  document.querySelectorAll('.quick-btn').forEach(b=>b.classList.remove('active'));
+  const btn=document.getElementById('qb-neukoncene');
+  if(btn) btn.classList.add('active');
+  // Aplikuj rozšírený dátumový filter: LT do včerajška vrátane
   datumFilter.stlpec='lt';
   datumFilter.od='';
-  datumFilter.do=dt(-1); // vrátane včerajška a starších
-  // Ak existuje vizuálny indikátor filter-aktive, aktualizuj
+  datumFilter.do=dt(-1);
+  // Vizuálne označ stĺpec LT ako aktívny
   document.querySelectorAll('[id^="df-btn-"]').forEach(b=>b.style.color='');
   const lbl=document.getElementById('df-btn-lt');
   if(lbl) lbl.style.color='var(--red)';
@@ -1615,10 +1656,10 @@ function updateDash(){
   const celkom=MOCK_OBJ.filter(o=>!o.real&&o.farba!=='zlta').length;
   document.getElementById('dash-section').innerHTML=`
     <div class="dash-card c-blue" onclick="switchTab(2)"><div class="dash-val">${dnes}</div><div class="dash-lbl">Dnes na realizáciu</div></div>
-    <div class="dash-card c-red" onclick="quickFilter('neplan');switchTab(1)"><div class="dash-val">${neplan}</div><div class="dash-lbl">Nenaplánovaných</div></div>
-    <div class="dash-card c-orange" onclick="quickFilter('oneskorene');switchTab(1)"><div class="dash-val">${oneskor}</div><div class="dash-lbl">Oneskorených</div></div>
+    <div class="dash-card c-red" onclick="dashClickFilter('neplan')"><div class="dash-val">${neplan}</div><div class="dash-lbl">Nenaplánovaných</div></div>
+    <div class="dash-card c-orange" onclick="dashClickFilter('oneskorene')"><div class="dash-val">${oneskor}</div><div class="dash-lbl">Oneskorených</div></div>
     <div class="dash-card c-blue" onclick="switchTab(3)"><div class="dash-val">${prerez}</div><div class="dash-lbl">Pre-rezervovaných ADD</div></div>
-    <div class="dash-card c-yellow" onclick="quickFilter('neukoncene');switchTab(1)"><div class="dash-val">${celkom}</div><div class="dash-lbl">Otvorených celkom</div></div>
+    <div class="dash-card c-yellow" onclick="dashClickFilter('neukoncene')"><div class="dash-val">${celkom}</div><div class="dash-lbl">Otvorených celkom</div></div>
     ${notRead?`<div class="dash-card c-orange"><div class="dash-val">${notRead}</div><div class="dash-lbl">Nové notifikácie</div></div>`:''}`;
   // Aktualizuj globálny topbar – Po LT a diagnostiku (volá sa pri každej zmene MOCK_OBJ)
   updatePoLtBadge();
