@@ -83,6 +83,9 @@ input,select,textarea,button{font-family:var(--font);font-size:13px}
 .notif-badge{position:absolute;top:-5px;right:-5px;background:#ef5350;color:#fff;font-size:10px;font-weight:700;border-radius:10px;min-width:17px;height:17px;display:flex;align-items:center;justify-content:center;padding:0 3px;border:2px solid var(--accent)}
 .user-pill{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.2);border-radius:20px;padding:3px 12px 3px 6px;display:flex;align-items:center;gap:8px}
 .uav{width:26px;height:26px;border-radius:50%;background:rgba(255,255,255,.3);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff}
+#polt-badge{display:none}
+#polt-badge.visible{display:inline-flex!important}
+#polt-badge:hover{filter:brightness(1.1);transform:scale(1.03);transition:all .15s}
 .uname{font-size:12px;font-weight:600;color:#fff}.urola{font-size:10px;color:rgba(255,255,255,.75)}
 .btn-logout{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:12px;transition:all .2s}
 .btn-logout:hover{background:rgba(255,255,255,.25)}
@@ -202,6 +205,11 @@ input,select,textarea,button{font-family:var(--font);font-size:13px}
 .tr-blue td{background:var(--blue-bg);color:var(--blue)}
 .tr-red td{background:var(--red-bg);color:var(--red)}
 .tr-none td{background:#fff;color:var(--text)}
+/* Označený riadok pre F2 (úprava) – jemné modré ohraničenie aby neprebíjalo farbu stavu */
+.tbl tbody tr.row-selected td{box-shadow:inset 0 0 0 2px var(--accent);position:relative}
+/* Bulk selection – jemné modré pozadie pre označené riadky */
+.tbl tbody tr.bulk-checked td{background-image:linear-gradient(rgba(33,150,243,.08),rgba(33,150,243,.08))}
+#bulk-bar.show{display:flex!important}
 .td-mono{font-family:var(--mono);font-size:11px}
 .chk-cell{text-align:center;cursor:pointer;font-size:14px;padding:4px!important;width:32px}
 /* ─── FILTER ROW ────────────────────────────────────────── */
@@ -372,7 +380,14 @@ body[data-role="technik"] #page5 { display:flex!important; flex-direction:column
   <div class="topbar" style="position:relative">
     <div class="topbar-title">DISPECING <span style="font-weight:300;font-size:12px;opacity:.8">· Zriaďovanie</span></div>
     <div class="topbar-file" id="topbar-file">SUPTEL ŽILINA</div>
+    <!-- Diagnostika (admin/dispečér) – stav DB -->
+    <div id="diag-info" style="font-size:11px;color:rgba(255,255,255,.85);font-family:var(--mono);padding:0 8px;display:none" title="Stav databázy"></div>
     <div class="tsep"></div>
+    <!-- Po LT indikátor – červený badge s počtom otvorených objednávok po LT -->
+    <button id="polt-badge" onclick="quickFilterPoLt()" title="Otvorené objednávky po LT – klik pre filter"
+            style="display:none;background:var(--red);color:#fff;border:none;border-radius:14px;padding:4px 10px 4px 8px;font-size:11px;font-weight:700;cursor:pointer;align-items:center;gap:5px;letter-spacing:.3px">
+      ⚠ <span id="polt-count">0</span> Po LT
+    </button>
     <button class="notif-btn" onclick="toggleNotif()" id="notif-btn" title="Notifikácie">
       🔔<span class="notif-badge hidden" id="notif-badge">0</span>
     </button>
@@ -429,18 +444,18 @@ body[data-role="technik"] #page5 { display:flex!important; flex-direction:column
       <!-- FORMULÁR -->
       <div class="lp-inner">
         <div class="field"><label>ID objednávky *</label>
-          <input type="text" id="n-id" class="mono-input" placeholder="1-XXXXXXX" oninput="onIdInput()" autocomplete="off" style="color:var(--text)"></div>
+          <input type="text" id="n-id" class="mono-input" placeholder="1-XXXXXXX" oninput="onIdInput();this.value=this.value.toUpperCase()" onblur="this.value=this.value.trim().toUpperCase()" autocomplete="off" style="color:var(--text);text-transform:uppercase"></div>
         <div class="field"><label>Meno zákazníka</label>
-          <input type="text" id="n-meno" autocomplete="off"></div>
+          <input type="text" id="n-meno" onblur="this.value=this.value.trim()" autocomplete="off"></div>
         <div class="field"><label>Adresa</label>
-          <input type="text" id="n-adresa" placeholder="Obec, Ulica číslo" autocomplete="off"></div>
+          <input type="text" id="n-adresa" placeholder="Obec, Ulica číslo" onblur="this.value=this.value.trim()" autocomplete="off"></div>
         <div class="row2">
           <div class="field"><label>Typ</label>
-            <input type="text" id="n-typ" list="dl-typ" placeholder="M/O/E/SAT..." autocomplete="off">
+            <input type="text" id="n-typ" list="dl-typ" placeholder="M/O/E/SAT..." onblur="this.value=this.value.trim()" autocomplete="off">
             <datalist id="dl-typ"><option>E</option><option>M</option><option>O</option><option>SAT</option><option>DPIV</option><option>DSAT</option><option>PIV</option><option>MX</option><option>PV</option><option>TV</option><option>TV go</option></datalist>
           </div>
           <div class="field"><label>Balík</label>
-            <input type="text" id="n-balik" list="dl-balik" placeholder="M1/O1/SAT..." autocomplete="off">
+            <input type="text" id="n-balik" list="dl-balik" placeholder="M1/O1/SAT..." onblur="this.value=this.value.trim()" autocomplete="off">
             <datalist id="dl-balik"><option>M1</option><option>M2</option><option>M3</option><option>M4</option><option>M5</option><option>O1</option><option>O2</option><option>O3</option><option>O4</option><option>O5</option><option>O0</option><option>SAT</option><option>SAT+PIV</option><option>DPIV</option><option>DSAT</option><option>PIV</option><option>MX</option><option>mesh</option><option>TV go</option><option>INSTAL</option><option>O</option></datalist>
           </div>
         </div>
@@ -458,11 +473,11 @@ body[data-role="technik"] #page5 { display:flex!important; flex-direction:column
             <input type="date" id="n-plan"></div>
         </div>
         <div class="field"><label>Pracovný zdroj</label>
-          <input type="text" id="n-technik" list="dl-technik" placeholder="Vyberte alebo napíšte..." autocomplete="off">
+          <input type="text" id="n-technik" list="dl-technik" placeholder="Vyberte alebo napíšte..." onblur="this.value=this.value.trim()" autocomplete="off">
           <datalist id="dl-technik"></datalist>
         </div>
         <div class="field"><label>Poznámky</label>
-          <textarea id="n-pozn" rows="2"></textarea></div>
+          <textarea id="n-pozn" rows="2" onblur="this.value=this.value.trim()"></textarea></div>
         <div class="field"><label>Dátum realizácie</label>
           <input type="date" id="n-real"></div>
         <!-- Stav -->
@@ -522,7 +537,7 @@ body[data-role="technik"] #page5 { display:flex!important; flex-direction:column
   <!-- ═══ TAB 1: OBJEDNÁVKY ═══ -->
   <div class="tab-page" id="page1" style="flex-direction:column">
     <div class="search-bar">
-      <input type="text" id="s-query" placeholder="Vyhľadaj ID alebo meno..." oninput="searchLive()" onkeydown="if(event.key==='Enter')renderObjTable()">
+      <input type="text" id="s-query" placeholder="Vyhľadaj ID alebo meno (bez diakritiky tiež nájde)..." oninput="searchLive()" onkeydown="if(event.key==='Enter')renderObjTable()">
       <button class="btn btn-accent" onclick="renderObjTable()">🔍</button>
       <div style="width:1px;height:24px;background:var(--border);margin:0 2px"></div>
       <div class="quick-btn active" id="qb-all" onclick="quickFilter('all')">Všetky</div>
@@ -531,16 +546,28 @@ body[data-role="technik"] #page5 { display:flex!important; flex-direction:column
       <div class="quick-btn" id="qb-storno" onclick="quickFilter('storno')">Stornované</div>
       <div class="quick-btn" id="qb-prerezerv" onclick="quickFilter('prerezerv')">Prerezerv.</div>
       <div class="quick-btn" id="qb-neplan" onclick="quickFilter('neplan')">Nenaplánované</div>
+      <div style="width:1px;height:18px;background:var(--border);margin:0 2px"></div>
+      <div class="quick-btn" id="qb-dnes" onclick="quickFilter('dnes')" title="Plán = dnes">📅 Dnes</div>
+      <div class="quick-btn" id="qb-zajtra" onclick="quickFilter('zajtra')" title="Plán = zajtra">📅 Zajtra</div>
       <span class="sum-lbl ml-a" id="s-sum"></span>
       <button class="btn btn-outline btn-xs" onclick="zobrazStatistiky()" style="padding:5px 10px;font-size:12px;white-space:nowrap">📊 Štatistiky</button>
       <button class="btn btn-outline btn-xs" onclick="exportMesacnyVykaz()" style="padding:5px 10px;font-size:12px;white-space:nowrap">📋 Mesačný výkaz</button>
       <button class="btn btn-green btn-xs" onclick="exportExcel()" title="Exportovať zobrazené záznamy do Excelu" style="padding:5px 12px;font-size:12px;font-weight:600;white-space:nowrap">📥 Export Excel</button>
+      <button class="btn btn-outline btn-xs" onclick="zobrazNapovedu()" title="Nápoveda – klávesové skratky" style="padding:5px 10px;font-size:12px;white-space:nowrap">⌨ Skratky</button>
+    </div>
+    <!-- Bulk action panel – zobrazí sa keď je niečo označené -->
+    <div id="bulk-bar" style="display:none;background:#fff8e1;border-bottom:1px solid #ffca28;padding:6px 12px;align-items:center;gap:8px;font-size:12px">
+      <span id="bulk-count" style="font-weight:700;color:#7b5300">0 označených</span>
+      <button class="btn btn-accent btn-xs" onclick="bulkPriraditTechnika()" style="padding:4px 10px;font-size:11px">👤 Priradiť technika</button>
+      <button class="btn btn-green btn-xs" onclick="bulkExportSelected()" style="padding:4px 10px;font-size:11px">📥 Export označené</button>
+      <button class="btn btn-outline btn-xs" onclick="bulkClear()" style="padding:4px 10px;font-size:11px;margin-left:auto">✕ Zrušiť výber</button>
     </div>
     <!-- Stĺpcové filtre + tabuľka -->
     <div class="tbl-wrap">
       <table class="tbl" id="s-tbl">
         <thead>
           <tr>
+            <th class="chk-cell" style="width:30px"><input type="checkbox" id="bulk-all" onchange="bulkToggleAll(this)" title="Označiť všetky zobrazené"></th>
             <th>ID objednávky</th><th>Meno zákazníka</th><th>Adresa</th>
             <th>Typ</th><th>Balík</th>
             <th>Prijatie <span id="df-btn-prijatia" onclick="otvorDatumFilter('prijatia')" style="cursor:pointer;font-size:10px" title="Filter dátumu">▼</span></th>
@@ -552,6 +579,7 @@ body[data-role="technik"] #page5 { display:flex!important; flex-direction:column
             <th>ADD</th><th>Poznámky</th>
           </tr>
           <tr class="filter-row" id="filter-row">
+            <th></th>
             <th><input type="text" id="f-id" oninput="renderObjTable()" placeholder="filter"></th>
             <th><input type="text" id="f-meno" oninput="renderObjTable()" placeholder="filter"></th>
             <th><input type="text" id="f-adresa" oninput="renderObjTable()" placeholder="filter"></th>
@@ -765,6 +793,30 @@ body[data-role="technik"] #page5 { display:flex!important; flex-direction:column
 </div>
 </div>
 
+<!-- POTVRDENIE NEBEZPEČNEJ AKCIE (vymazanie) – heslom -->
+<div class="modal-overlay" id="confirm-overlay">
+<div class="modal" style="max-width:400px" onclick="event.stopPropagation()">
+  <div class="modal-hdr" style="background:var(--red-bg);color:var(--red);border-bottom-color:var(--red)">
+    <h3 style="color:var(--red)">⚠ Potvrdenie nebezpečnej akcie</h3>
+    <button class="btn btn-outline btn-xs" onclick="confirmDangerous(false)">✕</button>
+  </div>
+  <div style="padding:18px">
+    <div id="confirm-msg" style="font-size:13px;color:var(--text);margin-bottom:14px;line-height:1.5"></div>
+    <div class="field" style="margin-bottom:0">
+      <label>Pre potvrdenie zadajte svoje prihlasovacie heslo:</label>
+      <input type="password" id="confirm-pwd" autocomplete="off"
+             style="width:100%;padding:8px;border:1px solid var(--border2);border-radius:6px;font-size:13px;margin-top:4px"
+             onkeydown="if(event.key==='Enter')confirmDangerous(true)">
+    </div>
+    <div id="confirm-err" style="color:var(--red);font-size:11px;min-height:14px;margin-top:6px"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">
+      <button class="btn btn-outline" onclick="confirmDangerous(false)">Zrušiť</button>
+      <button class="btn btn-red" onclick="confirmDangerous(true)">🗑 Potvrdiť vymazanie</button>
+    </div>
+  </div>
+</div>
+</div>
+
 <!-- EDIT MODAL -->
 <div class="modal-overlay" id="edit-overlay" onclick="closeEditIfBg(event)">
 <div class="modal">
@@ -909,6 +961,7 @@ function startPolling(){
         if(!typing) renderMobil();
       }
       updateDash();renderRecent();
+      updatePoLtBadge();updateDiagInfo();
       // Kapacita - zachovaj užívateľský výber dátumov
       const cfv=document.getElementById('cap-from')?.value||T;
       const ctv=document.getElementById('cap-to')?.value||dt(9);
@@ -1036,6 +1089,11 @@ function stavFromFarba(f){return f==='zelena'?'hotova':f==='zlta'?'storno':f==='
 function getRiadok(id){return MOCK_OBJ.find(o=>o.id_obj===id);}
 function now8(){return new Date().toISOString().slice(0,19);}
 function fmtRezD(iso){if(!iso)return'????????';const[y,m,d]=iso.split('-');return`${d}${m}${y}`;}
+// Diakritika-necitlivé porovnanie: "Postulka"→"postulka", "Žilina"→"zilina"
+// Použité pri všetkých textových filtroch tak, aby user mohol písať bez diakritiky.
+function normDiakr(s){
+  return (s==null?'':String(s)).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+}
 // nenaplanovana = plan prázdny A nie je storno A nie uzavretá
 // Zmena 8: Nenaplánovaná = bez plánu ALEBO (má plán ale bez priradenia technika)
 function isNeplan(o){
@@ -1053,7 +1111,98 @@ function onAddInput(el){
   const h=document.getElementById('n-ai-hint'); if(h) h.style.display='none';
   aiTrigger();
 }
-// quickFilter + searchLive musia byť pred renderObjTable
+// ════════════════════════════════════════════════════════════
+// BULK SELECTION (Objednávky – hromadné akcie)
+// Stav je globálne mimo renderObjTable, lebo prežíva re-render.
+// ════════════════════════════════════════════════════════════
+let bulkSelected=new Set();
+function bulkToggleRow(id_obj, checked){
+  if(checked) bulkSelected.add(id_obj);
+  else        bulkSelected.delete(id_obj);
+  // Vizuálny refresh len označeného TR (bez prerenderovania celej tabuľky pre rýchlosť)
+  const tr=document.querySelector(`#s-tbody tr[data-id="${id_obj}"]`);
+  if(tr) tr.classList.toggle('bulk-checked',checked);
+  bulkUpdateBar();
+}
+function bulkToggleAll(cb){
+  // Označí/odznačí všetky aktuálne ZOBRAZENÉ riadky (rešpektuje filter)
+  const trs=document.querySelectorAll('#s-tbody tr');
+  trs.forEach(tr=>{
+    const id=tr.getAttribute('data-id');
+    if(!id) return;
+    if(cb.checked) bulkSelected.add(id);
+    else           bulkSelected.delete(id);
+    tr.classList.toggle('bulk-checked',cb.checked);
+    const rowCb=tr.querySelector('input[type="checkbox"]');
+    if(rowCb) rowCb.checked=cb.checked;
+  });
+  bulkUpdateBar();
+}
+function bulkClear(){
+  bulkSelected.clear();
+  document.querySelectorAll('#s-tbody tr.bulk-checked').forEach(tr=>tr.classList.remove('bulk-checked'));
+  document.querySelectorAll('#s-tbody input[type="checkbox"]:checked').forEach(cb=>cb.checked=false);
+  const allCb=document.getElementById('bulk-all'); if(allCb) allCb.checked=false;
+  bulkUpdateBar();
+}
+function bulkUpdateBar(){
+  const bar=document.getElementById('bulk-bar');
+  if(!bar) return;
+  const cnt=bulkSelected.size;
+  if(cnt>0){
+    bar.classList.add('show');
+    document.getElementById('bulk-count').textContent=`${cnt} označen${cnt===1?'á':cnt<5?'é':'ých'}`;
+  } else {
+    bar.classList.remove('show');
+  }
+}
+function bulkPriraditTechnika(){
+  if(!bulkSelected.size){toast('⚠ Žiadne objednávky označené');return;}
+  // Použijeme rovnaký zoznam technikov ako pri Hromadnej zmene
+  const fromUsers=(DEMO_USERS||[]).filter(u=>u.rola==='technik').map(u=>u.technik_meno||u.meno).filter(Boolean);
+  const fromMockAll=[...new Set(MOCK_OBJ.map(o=>o.zdroj).filter(Boolean))];
+  const all=[...new Set([...(TECHNICI||[]),...fromUsers,...fromMockAll])].sort();
+  const novy=prompt(`Priradiť ${bulkSelected.size} označených objednávok technikovi:\n\nDostupní technici:\n${all.join(', ')}\n\nZadajte meno technika (presne):`,'');
+  if(!novy) return;
+  const novyTrim=novy.trim();
+  if(!all.includes(novyTrim)){
+    if(!confirm(`Technik „${novyTrim}" nie je v zozname evidovaných.\nNapriek tomu pokračovať a priradiť?`))return;
+  }
+  // Aplikuj zmenu lokálne aj na backend
+  const ids=[...bulkSelected];
+  let changed=0;
+  ids.forEach(id=>{
+    const i=MOCK_OBJ.findIndex(o=>o.id_obj===id);
+    if(i>=0){
+      MOCK_OBJ[i].zdroj=novyTrim;
+      MOCK_OBJ[i].zmeneny=now8();
+      api('PATCH',`/api/objednavky/${id}`,{zdroj:novyTrim}).catch(()=>{});
+      logHistoria(id,'zmena',`Hromadná zmena technika → ${novyTrim} (${currentUser?.meno||''})`);
+      changed++;
+    }
+  });
+  bulkClear();
+  renderObjTable();
+  fillTechDatalist();
+  toast(`✓ Priradené ${changed} objednávok technikovi „${novyTrim}"`);
+}
+function bulkExportSelected(){
+  if(!bulkSelected.size){toast('⚠ Žiadne objednávky označené');return;}
+  // Export len označených – cez existujúce exportExcel ktoré pozerá DOM-tabuľku
+  // Trick: skryjeme dočasne neoznačené riadky, zavoláme export, vrátime
+  const tbody=document.getElementById('s-tbody');
+  const trs=[...tbody.querySelectorAll('tr')];
+  const hidden=[];
+  trs.forEach(tr=>{
+    const id=tr.getAttribute('data-id');
+    if(id && !bulkSelected.has(id)){
+      hidden.push([tr, tr.style.display]);
+      tr.style.display='none';
+    }
+  });
+  try{ exportExcel(); }
+  finally{ hidden.forEach(([tr,prev])=>{ tr.style.display=prev||''; }); }
+}
 let quickMode='all';
 let _sTimer=null;
 function quickFilter(mode){
@@ -1066,6 +1215,46 @@ function quickFilter(mode){
 function searchLive(){clearTimeout(_sTimer);_sTimer=setTimeout(renderObjTable,300);}
 // oneskorená = plan v minulosti, bez realizácie, nie storno
 function isOneskoren(o){return o.plan&&o.plan<T&&!o.real&&o.farba!=='zlta'&&o.farba!=='zelena';}
+// Po LT = LT v minulosti, bez realizácie, nie storno (varovný indikátor v topbare)
+// Toto je kritický signál pre dispečérku – musí ich riešiť prerezerváciou.
+function isPoLt(o){return o.lt&&o.lt<T&&!o.real&&o.farba!=='zlta'&&o.farba!=='zelena';}
+function updatePoLtBadge(){
+  const badge=document.getElementById('polt-badge');
+  if(!badge) return;
+  if(currentUser?.rola==='technik'){badge.classList.remove('visible');return;}
+  const cnt=MOCK_OBJ.filter(isPoLt).length;
+  document.getElementById('polt-count').textContent=cnt;
+  if(cnt>0) badge.classList.add('visible');
+  else      badge.classList.remove('visible');
+}
+function quickFilterPoLt(){
+  // Klik na badge → prepni do Objednávok a aplikuj filter LT < dnes (cez rozšírený dátumový filter)
+  switchTab(1);
+  // Reset všetkých quick módov a označ "neukončené"
+  quickFilter('neukoncene');
+  // Použi rozšírený dátumový filter: LT do (dnes-1)
+  datumFilter.stlpec='lt';
+  datumFilter.od='';
+  datumFilter.do=dt(-1); // vrátane včerajška a starších
+  // Ak existuje vizuálny indikátor filter-aktive, aktualizuj
+  document.querySelectorAll('[id^="df-btn-"]').forEach(b=>b.style.color='');
+  const lbl=document.getElementById('df-btn-lt');
+  if(lbl) lbl.style.color='var(--red)';
+  renderObjTable();
+  toast('🔍 Filter: Po LT (LT < dnes, neukončené)');
+}
+// Diagnostika v topbare – počet objednávok, technikov, online stav
+function updateDiagInfo(){
+  const el=document.getElementById('diag-info');
+  if(!el) return;
+  if(currentUser?.rola!=='admin'&&currentUser?.rola!=='dispečér'){el.style.display='none';return;}
+  const objCnt=MOCK_OBJ.length;
+  const techCnt=[...new Set([...(TECHNICI||[]),...((DEMO_USERS||[]).filter(u=>u.rola==='technik').map(u=>u.technik_meno||u.meno).filter(Boolean))])].length;
+  const online=navigator.onLine;
+  el.innerHTML=`📊 ${objCnt} obj · 👤 ${techCnt} tech · ${online?'<span style="color:#a5d6a7">●</span> online':'<span style="color:#ffab91">●</span> offline'}`;
+  el.style.display='block';
+  el.title=`Databáza: ${objCnt} objednávok · ${techCnt} aktívnych technikov · Stav siete: ${online?'online':'offline'}`;
+}
 // farba pre zobrazovaciu logiku v tabuľke objednávok
 function getDisplayFarba(o){
   if(o.farba==='zelena')return'zelena';
@@ -1254,6 +1443,8 @@ function switchTab(idx){
     document.getElementById('page'+i)?.classList.toggle('active',i===idx);
     document.getElementById('snav'+i)?.classList.toggle('active',i===idx);
   }
+  // Pri opustení záložky Objednávky vyčisti bulk selection (predchádza zmätku)
+  if(activeTab===1 && idx!==1) bulkClear();
   activeTab=idx;
   if(idx===1){
     renderObjTable();
@@ -1338,9 +1529,16 @@ function initApp(){
   }
   if(rola!=='technik'){
     document.getElementById('mob-tech').disabled=false;
+    // Autosave novej objednávky a obnovenie draftu (admin/dispečér/operátor majú formulár)
+    if(rola!=='operátor'){
+      draftStartAutosave();
+      setTimeout(draftLoad,300); // krátka pauza aby DOM bol kompletný
+    }
   }
   updateNotifBadge();
   updateDash();
+  updatePoLtBadge(); // globálny indikátor Po LT v topbare
+  updateDiagInfo();  // diagnostika v topbare (DB stav)
 }
 function fillTechDatalist(){
   // Technici = z API (TECHNICI) + DEMO_USERS technici + unikátne hodnoty zo zdroj stĺpca
@@ -1422,6 +1620,9 @@ function updateDash(){
     <div class="dash-card c-blue" onclick="switchTab(3)"><div class="dash-val">${prerez}</div><div class="dash-lbl">Pre-rezervovaných ADD</div></div>
     <div class="dash-card c-yellow" onclick="quickFilter('neukoncene');switchTab(1)"><div class="dash-val">${celkom}</div><div class="dash-lbl">Otvorených celkom</div></div>
     ${notRead?`<div class="dash-card c-orange"><div class="dash-val">${notRead}</div><div class="dash-lbl">Nové notifikácie</div></div>`:''}`;
+  // Aktualizuj globálny topbar – Po LT a diagnostiku (volá sa pri každej zmene MOCK_OBJ)
+  updatePoLtBadge();
+  updateDiagInfo();
 }
 
 // ════════════════════════════════════════════════════════════
@@ -1730,10 +1931,12 @@ function zapisObjednavku(){
   const novyZaznam={
     id_obj:idObj, meno:document.getElementById('n-meno').value.trim(),
     adresa:document.getElementById('n-adresa').value.trim(),
-    typ:document.getElementById('n-typ').value, balik:document.getElementById('n-balik').value,
+    typ:document.getElementById('n-typ').value.trim(),
+    balik:document.getElementById('n-balik').value.trim(),
     prijatia:document.getElementById('n-prijatia').value, plan,
     real:document.getElementById('n-real').value, lt,
-    zdroj:document.getElementById('n-technik').value, add_txt, pozn, farba, zmeneny:now8(),
+    zdroj:document.getElementById('n-technik').value.trim(),
+    add_txt, pozn, farba, zmeneny:now8(),
   };
   // Lokálne pridaj okamžite
   if(dup){const i=MOCK_OBJ.findIndex(o=>o.id_obj.toUpperCase()===idObj);if(i>=0)MOCK_OBJ[i]=novyZaznam;}
@@ -1761,7 +1964,80 @@ function vymazatFormu(){
   document.getElementById('n-ai-hint').style.display='none';
   document.getElementById('n-dup-warn').style.display='none';
   document.getElementById('paste-box').value='';
+  // Vymaž draft z localStorage pri ručnom reset
+  draftClear();
   document.getElementById('n-id').focus();
+}
+
+// ════════════════════════════════════════════════════════════
+// AUTO-SAVE ROZPRACOVANEJ NOVEJ OBJEDNÁVKY (localStorage)
+// Predchádza strate textu pri náhodnom refreshi/páde browser-u.
+// ════════════════════════════════════════════════════════════
+const DRAFT_KEY='dispecing_draft_nova_v1';
+const DRAFT_FIELDS=['n-id','n-meno','n-adresa','n-typ','n-balik','n-prijatia','n-lt','n-add','n-plan','n-technik','n-pozn'];
+let draftTimer=null,draftBanner=null;
+function draftSave(){
+  try{
+    const d={};let any=false;
+    DRAFT_FIELDS.forEach(id=>{const el=document.getElementById(id);if(el){d[id]=el.value||'';if(el.value&&id!=='n-prijatia')any=true;}});
+    d._stav=currentStavNova||'';
+    d._ts=new Date().toISOString();
+    if(any) localStorage.setItem(DRAFT_KEY,JSON.stringify(d));
+    else    localStorage.removeItem(DRAFT_KEY);
+  }catch(e){/* localStorage môže byť disabled */}
+}
+function draftClear(){
+  try{ localStorage.removeItem(DRAFT_KEY); }catch(e){}
+  if(draftBanner){draftBanner.style.display='none';}
+}
+function draftLoad(){
+  // Načítaj draft pri štarte (volá sa z initApp pre admin/dispečér)
+  try{
+    const raw=localStorage.getItem(DRAFT_KEY);
+    if(!raw) return;
+    const d=JSON.parse(raw);
+    // Skontroluj či má aspoň meno alebo ID (inak ignoruj)
+    if(!d['n-id']&&!d['n-meno']) return;
+    // Ukáž banner – nech user vie že draft je k dispozícii
+    if(!draftBanner){
+      draftBanner=document.createElement('div');
+      draftBanner.style.cssText='background:#fff8e1;border:1px solid #ffca28;border-radius:6px;padding:8px 12px;margin:6px 0;display:flex;align-items:center;gap:10px;font-size:12px;color:#7b5300';
+      draftBanner.innerHTML=
+        '<span style="flex:1">💾 Máte rozpracovanú objednávku z <strong id="draft-time"></strong></span>'+
+        '<button class="btn btn-accent btn-xs" onclick="draftRestore()" style="padding:4px 10px;font-size:11px">Obnoviť</button>'+
+        '<button class="btn btn-outline btn-xs" onclick="draftClear()" style="padding:4px 10px;font-size:11px">Zahodiť</button>';
+      const form=document.querySelector('#page0 .form-section')||document.querySelector('#page0');
+      if(form) form.insertBefore(draftBanner, form.firstChild);
+    }
+    const t=new Date(d._ts||Date.now());
+    document.getElementById('draft-time').textContent=
+      t.toLocaleString('sk-SK',{day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'});
+    draftBanner.style.display='flex';
+  }catch(e){console.warn('Draft load:',e.message);}
+}
+function draftRestore(){
+  try{
+    const raw=localStorage.getItem(DRAFT_KEY);if(!raw) return;
+    const d=JSON.parse(raw);
+    DRAFT_FIELDS.forEach(id=>{const el=document.getElementById(id);if(el&&d[id]!==undefined) el.value=d[id];});
+    if(d['n-add']==='A'){const a=document.getElementById('n-add');if(a) a.classList.add('add-a');}
+    // Stav (zelené/žlté tlačidlo)
+    if(d._stav){currentStavNova=d._stav;document.querySelectorAll('#n-stav-opts .stav-opt').forEach(o=>{o.classList.toggle('active',o.dataset.stav===d._stav);});}
+    if(draftBanner) draftBanner.style.display='none';
+    toast('✓ Rozpracovaná objednávka obnovená');
+    switchTab(0);
+  }catch(e){toast('⚠ Chyba obnovy: '+e.message);}
+}
+function draftStartAutosave(){
+  // Po každej zmene v ľubovoľnom poli formulára naplánuj save (debounce 5s)
+  DRAFT_FIELDS.forEach(id=>{
+    const el=document.getElementById(id);
+    if(!el || el.dataset.draftWired) return;
+    el.dataset.draftWired='1';
+    const handler=()=>{clearTimeout(draftTimer);draftTimer=setTimeout(draftSave,5000);};
+    el.addEventListener('input',handler);
+    el.addEventListener('change',handler);
+  });
 }
 
 // ════════════════════════════════════════════════════════════
@@ -1899,10 +2175,10 @@ function dateFilterMatch(iso, query){
 }
 
 function renderObjTable(){
-  const q=(document.getElementById('s-query').value||'').trim().toLowerCase();
-  const fid=(document.getElementById('f-id').value||'').toLowerCase();
-  const fmeno=(document.getElementById('f-meno').value||'').toLowerCase();
-  const fadr=(document.getElementById('f-adresa').value||'').toLowerCase();
+  const q=normDiakr(document.getElementById('s-query').value||'');
+  const fid=normDiakr(document.getElementById('f-id').value||'');
+  const fmeno=normDiakr(document.getElementById('f-meno').value||'');
+  const fadr=normDiakr(document.getElementById('f-adresa').value||'');
   const ftyp=document.getElementById('f-typ').value;
   const fbal=document.getElementById('f-balik').value;
   const fprij=dtVal('prij');
@@ -1911,7 +2187,7 @@ function renderObjTable(){
   const flt=dtVal('lt');
   const fdolt=document.getElementById('f-dolt').value;
   const fadd=document.getElementById('f-add').value;
-  const fpozn=(document.getElementById('f-pozn').value||'').toLowerCase();
+  const fpozn=normDiakr(document.getElementById('f-pozn').value||'');
 
   let rows=[...MOCK_OBJ];
   // Default zoradenie: najstaršie hore, NAJNOVŠIE DOLE (chronologicky podľa prijatia).
@@ -1924,10 +2200,12 @@ function renderObjTable(){
   else if(quickMode==='prerezerv')rows=rows.filter(o=>o.farba==='modra');
   else if(quickMode==='neplan')rows=rows.filter(isNeplan);
   else if(quickMode==='oneskorene')rows=rows.filter(isOneskoren);
-  if(q)rows=rows.filter(o=>(o.id_obj||'').toLowerCase().includes(q)||(o.meno||'').toLowerCase().includes(q));
-  if(fid)rows=rows.filter(o=>(o.id_obj||'').toLowerCase().includes(fid));
-  if(fmeno)rows=rows.filter(o=>(o.meno||'').toLowerCase().includes(fmeno));
-  if(fadr)rows=rows.filter(o=>(o.adresa||'').toLowerCase().includes(fadr));
+  else if(quickMode==='dnes'){const dnes=T;rows=rows.filter(o=>o.plan===dnes&&o.farba!=='zlta');}
+  else if(quickMode==='zajtra'){const zajtra=dt(1);rows=rows.filter(o=>o.plan===zajtra&&o.farba!=='zlta');}
+  if(q)rows=rows.filter(o=>normDiakr(o.id_obj||'').includes(q)||normDiakr(o.meno||'').includes(q));
+  if(fid)rows=rows.filter(o=>normDiakr(o.id_obj||'').includes(fid));
+  if(fmeno)rows=rows.filter(o=>normDiakr(o.meno||'').includes(fmeno));
+  if(fadr)rows=rows.filter(o=>normDiakr(o.adresa||'').includes(fadr));
   if(ftyp)rows=rows.filter(o=>o.typ===ftyp);
   if(fbal)rows=rows.filter(o=>o.balik===fbal);
   if(fprij)rows=rows.filter(o=>dateFilterMatch(o.prijatia,fprij));
@@ -1955,7 +2233,7 @@ function renderObjTable(){
     });
   }
   if(fadd)rows=rows.filter(o=>o.add_txt===fadd);
-  if(fpozn)rows=rows.filter(o=>(o.pozn||'').toLowerCase().includes(fpozn));
+  if(fpozn)rows=rows.filter(o=>normDiakr(o.pozn||'').includes(fpozn));
 
   const tbody=document.getElementById('s-tbody');
   // Pri viac ako 500 riadkoch zobrazujeme POSLEDNÝCH 500 (najnovšie),
@@ -1969,8 +2247,16 @@ function renderObjTable(){
     const doLT=o.lt&&ref?Math.round((iso2date(o.lt)-iso2date(ref))/86400000):null;
     const doLTtxt=doLT!==null?(doLT>=0?String(doLT):String(doLT)):'';
     const doLTred=doLT!==null&&doLT<0;
-    return`<tr class="${cls}" ondblclick="otvorEditModal('${o.id_obj}')">
-      <td class="td-mono">${o.id_obj}</td>
+    // Posledná zmena – tooltip + indikátor (ⓘ ak bolo zmenené dnes)
+    const zmTs=o.zmeneny||'';
+    const zmDay=zmTs.slice(0,10);
+    const zmTime=zmTs.length>=16?zmTs.slice(11,16):'';
+    const zmenenyDnes=zmDay===T;
+    const zmenInfo=zmTs?`Naposledy zmenené: ${fmtD(zmDay)} ${zmTime}\nDvojklik = upraviť · F2 = upraviť · 📋 História v dialógu úpravy`:'Dvojklik / F2 = upraviť';
+    const zmenIcon=zmenenyDnes?'<span style="color:#1976d2;font-size:9px;margin-right:3px" title="Zmenené dnes">●</span>':'';
+    return`<tr class="${cls}${bulkSelected.has(o.id_obj)?' bulk-checked':''}" onclick="selectObjRow(this)" ondblclick="otvorEditModal('${o.id_obj}')" data-id="${o.id_obj}" title="${zmenInfo.replace(/"/g,'&quot;')}">
+      <td class="chk-cell" onclick="event.stopPropagation()"><input type="checkbox" ${bulkSelected.has(o.id_obj)?'checked':''} onchange="bulkToggleRow('${o.id_obj}',this.checked)"></td>
+      <td class="td-mono">${zmenIcon}${o.id_obj}</td>
       <td>${o.meno||''}</td>
       <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis">${o.adresa||''}</td>
       <td>${o.typ||''}</td><td>${o.balik||''}</td>
@@ -1983,6 +2269,7 @@ function renderObjTable(){
   }).join('');
   document.getElementById('s-sum').textContent=`Zobrazených: ${Math.min(rows.length,500)}${rows.length>500?' (posledných 500 – najnovšie)':''}`;
   setStatus(`Objednávky: ${rows.length} záznamov`,'ok');
+  bulkUpdateBar(); // aktualizuj počet označených v bulk-bare
 }
 
 // ════════════════════════════════════════════════════════════
@@ -2478,12 +2765,70 @@ function pridajUsera(){
 
 function vymazUser(idx){
   if(DEMO_USERS[idx].email===currentUser?.email){toast('⚠ Nemôžete vymazať seba!');return;}
-  if(!confirm(`Vymazať používateľa ${DEMO_USERS[idx].meno}?`))return;
-  const uid=DEMO_USERS[idx]._id;
-  DEMO_USERS.splice(idx,1);showPass.splice(idx,1);
-  renderUserTable();toast('Používateľ vymazaný');
-  if(uid) api('DELETE',`/api/users/${uid}`).catch(e=>toast('⚠ Chyba: '+e.message));
+  const u=DEMO_USERS[idx];
+  confirmDangerous(`Vymazať používateľa <strong>${u.meno}</strong> (${u.email})?<br><br>Táto akcia je <strong>nevratná</strong>.`,()=>{
+    const uid=u._id;
+    DEMO_USERS.splice(idx,1);showPass.splice(idx,1);
+    renderUserTable();toast(`✓ Používateľ ${u.meno} vymazaný`);
+    if(uid) api('DELETE',`/api/users/${uid}`).catch(e=>toast('⚠ API chyba: '+e.message));
+  });
 }
+
+// ════════════════════════════════════════════════════════════
+// CONFIRM-DANGEROUS: heslom-chránené potvrdenie nebezpečných akcií
+// Použitie: confirmDangerous(html_msg, callback) – otvorí modal,
+// po správnom hesle zavolá callback. Callback bez argumentov.
+// confirmDangerous(false) = zatvorí modal bez akcie.
+// ════════════════════════════════════════════════════════════
+let _confirmCallback=null;
+function confirmDangerous(arg, callback){
+  const overlay=document.getElementById('confirm-overlay');
+  if(arg===true){
+    // Potvrdiť – overiť heslo
+    const pwd=document.getElementById('confirm-pwd').value;
+    if(!pwd){document.getElementById('confirm-err').textContent='Zadajte heslo';return;}
+    document.getElementById('confirm-err').textContent='Overujem heslo...';
+    // Re-login na overenie hesla – backend vráti ok ak heslo sedí.
+    // Aby sme neporušili existujúcu session, uložíme starý token a vrátime ho po overení.
+    const savedToken=API_TOKEN;
+    fetch(API_URL+'/api/login',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({email:currentUser.email, heslo:pwd})
+    }).then(r=>{
+      if(!r.ok) throw new Error('bad');
+      // Heslo OK – zachovaj pôvodný token (ten z login bol možno iný), zavolaj callback
+      API_TOKEN=savedToken;
+      overlay.classList.remove('open');
+      document.getElementById('confirm-pwd').value='';
+      document.getElementById('confirm-err').textContent='';
+      if(_confirmCallback) try{ _confirmCallback(); }catch(e){console.error(e);}
+      _confirmCallback=null;
+    }).catch(()=>{
+      API_TOKEN=savedToken; // istota
+      document.getElementById('confirm-err').textContent='⚠ Nesprávne heslo';
+      document.getElementById('confirm-pwd').focus();
+      document.getElementById('confirm-pwd').select();
+    });
+    return;
+  }
+  if(arg===false){
+    // Zatvorenie bez akcie
+    overlay.classList.remove('open');
+    document.getElementById('confirm-pwd').value='';
+    document.getElementById('confirm-err').textContent='';
+    _confirmCallback=null;
+    return;
+  }
+  // Otvorenie – arg = HTML message, callback = funkcia
+  document.getElementById('confirm-msg').innerHTML=arg||'Potvrďte vymazanie.';
+  document.getElementById('confirm-pwd').value='';
+  document.getElementById('confirm-err').textContent='';
+  _confirmCallback=callback||null;
+  overlay.classList.add('open');
+  setTimeout(()=>document.getElementById('confirm-pwd').focus(),100);
+}
+
 function saveImap(){
   IMAP_CONFIG.server=document.getElementById('imap-server').value;
   IMAP_CONFIG.email=document.getElementById('imap-email').value;
@@ -2494,8 +2839,11 @@ function saveImap(){
 // ════════════════════════════════════════════════════════════
 function exportExcel(){
   const tbody=document.getElementById('s-tbody');
-  const rows=[...tbody.querySelectorAll('tr')];
-  if(!rows.length){toast('⚠ Žiadne záznamy na export.');return;}
+  // Filter na viditeľné riadky (bulk-export skryje neoznačené cez display:none)
+  const rows=[...tbody.querySelectorAll('tr')].filter(tr=>tr.offsetParent!==null||tr.style.display!=='none');
+  // Pri bežnom volaní (bez bulk) berieme všetky riadky
+  const allRows=rows.length?rows:[...tbody.querySelectorAll('tr')];
+  if(!allRows.length){toast('⚠ Žiadne záznamy na export.');return;}
 
   const cols=['ID objednávky','Meno zákazníka','Adresa','Typ','Balík','Prijatie','Realizácia','Plán','Technik','LT','Do/Po LT','ADD','Poznámky'];
   const dnes=new Date().toISOString().slice(0,10);
@@ -2504,11 +2852,12 @@ function exportExcel(){
   const bgMap={'tr-green':'FFA5D6A7','tr-yellow':'FFFFF176','tr-blue':'FF90CAF9','tr-red':'FFEF9A9A','tr-none':'FFFFFFFF'};
   const fgMap={'tr-green':'FF1B5E20','tr-yellow':'FF6D4C00','tr-blue':'FF0D47A1','tr-red':'FFB71C1C','tr-none':'FF1A1D23'};
 
-  // Zoberieme dáta a farby
-  const dataRows=rows.map(tr=>{
+  // Zoberieme dáta a farby. PRVÝ TD je checkbox – preskočíme ho.
+  const dataRows=allRows.map(tr=>{
     let fk='tr-none';
     ['tr-green','tr-yellow','tr-blue','tr-red'].forEach(c=>{if(tr.classList.contains(c))fk=c;});
-    return {cells:[...tr.querySelectorAll('td')].map(td=>td.textContent.trim().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')), fk};
+    const tds=[...tr.querySelectorAll('td')].slice(1); // .slice(1) preskočí stĺpec checkbox
+    return {cells:tds.map(td=>td.textContent.trim().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')), fk};
   });
 
   // Šírky stĺpcov
@@ -2884,6 +3233,66 @@ function _exportDoExcelu({cols, dataRows, nazovListu, subor, sumarika}){
 // ════════════════════════════════════════════════════════════
 // ZMENA 5: ŠTATISTIKY
 // ════════════════════════════════════════════════════════════
+// Nápoveda – klávesové skratky a tipy
+function zobrazNapovedu(){
+  const w=window.open('','_blank','width=560,height=620');
+  if(!w){toast('⚠ Otváranie okna bolo zablokované prehliadačom');return;}
+  const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Nápoveda – DISPECING</title>
+  <style>body{font-family:Segoe UI,Arial,sans-serif;padding:24px;background:#f0f2f5;margin:0;color:#1a1d23}
+  h2{color:#1565c0;margin:0 0 14px}h3{color:#444;margin:18px 0 8px;font-size:14px}
+  .karta{background:#fff;border-radius:8px;padding:14px 18px;box-shadow:0 1px 4px rgba(0,0,0,.08);margin-bottom:14px}
+  table{border-collapse:collapse;width:100%;font-size:13px}
+  td{padding:7px 10px;border-bottom:1px solid #eef0f4;vertical-align:top}
+  td:first-child{width:130px}
+  kbd{background:#1565c0;color:#fff;border-radius:4px;padding:2px 8px;font-family:Consolas,monospace;font-size:11px;font-weight:600;display:inline-block;margin:1px 0}
+  .tip{font-size:12px;color:#555;line-height:1.5}
+  .footer{font-size:11px;color:#888;text-align:center;margin-top:18px}
+  </style></head><body>
+  <h2>⌨ Klávesové skratky · DISPECING</h2>
+
+  <div class="karta">
+    <h3>Globálne</h3>
+    <table>
+      <tr><td><kbd>Ctrl</kbd> + <kbd>N</kbd></td><td>Nová objednávka <span class="tip">(otvorí formulár a vyplní ID)</span></td></tr>
+      <tr><td><kbd>Ctrl</kbd> + <kbd>F</kbd></td><td>Vyhľadávanie v Objednávkach <span class="tip">(focus do search poľa)</span></td></tr>
+      <tr><td><kbd>Esc</kbd></td><td>Zatvoriť otvorený dialóg / dropdown</td></tr>
+    </table>
+  </div>
+
+  <div class="karta">
+    <h3>V tabuľke Objednávok</h3>
+    <table>
+      <tr><td>Klik na riadok</td><td>Označí riadok (modrý rámček)</td></tr>
+      <tr><td><kbd>F2</kbd></td><td>Otvorí na úpravu označený riadok</td></tr>
+      <tr><td>Dvojklik</td><td>Otvorí riadok na úpravu (alternatíva)</td></tr>
+    </table>
+  </div>
+
+  <div class="karta">
+    <h3>Rýchle filtre</h3>
+    <table>
+      <tr><td>📅 Dnes</td><td>Objednávky s plánom = dnes</td></tr>
+      <tr><td>📅 Zajtra</td><td>Objednávky s plánom = zajtra</td></tr>
+      <tr><td>Po LT</td><td>Klikom na červený badge v topbare → otvorenie po LT</td></tr>
+    </table>
+  </div>
+
+  <div class="karta">
+    <h3>Tipy pre vyhľadávanie</h3>
+    <table>
+      <tr><td>Diakritika</td><td>Hľadanie nepotrebuje diakritiku – „<strong>postulka</strong>" nájde „<strong>Poštulka</strong>", „<strong>zilina</strong>" nájde „<strong>Žilina</strong>"</td></tr>
+      <tr><td>Veľké písmená</td><td>Nezáleží na veľkosti písmen</td></tr>
+      <tr><td>Filtre stĺpcov</td><td>Pole pod hlavičkou stĺpca filtruje len ten stĺpec; horný search hľadá v ID + Mene súčasne</td></tr>
+    </table>
+  </div>
+
+  <div class="footer">DISPECING · SUPTEL ŽILINA</div>
+  </body></html>`;
+  w.document.write(html);
+  w.document.close();
+}
+
+
 function zobrazStatistiky(){
   // Otvor okno – obsah generujeme dynamicky cez JS, dáta vkladáme INLINE do HTML
   const w=window.open('','_blank','width=820,height=640');
@@ -3025,6 +3434,65 @@ function resetDatumFilter(){
   renderObjTable();
 }
 
-document.addEventListener('keydown',e=>{if(e.key==='Escape')closeEdit();});
+// ════════════════════════════════════════════════════════════
+// KLÁVESOVÉ SKRATKY (Esc, Ctrl+N, Ctrl+F, F2)
+// ════════════════════════════════════════════════════════════
+function selectObjRow(tr){
+  document.querySelectorAll('#s-tbody tr.row-selected').forEach(r=>r.classList.remove('row-selected'));
+  tr.classList.add('row-selected');
+}
+document.addEventListener('keydown',e=>{
+  // Vždy zatvor otvorený modal/dropdown na Esc
+  if(e.key==='Escape'){
+    // Pri Esc – zatvor v poradí: edit, hromadná, mvyk, datum-filter, qr, multiselect, notif panel
+    const close=(sel)=>{const el=document.querySelector(sel);if(el&&el.classList.contains('open')){el.classList.remove('open');return true;}return false;};
+    if(typeof closeEdit==='function'&&document.getElementById('edit-overlay')?.classList.contains('open')){closeEdit();return;}
+    if(close('#confirm-overlay'))return;
+    if(close('#hromadna-overlay'))return;
+    if(close('#mvyk-overlay'))return;
+    if(close('#datum-filter-modal'))return;
+    if(close('#qr-overlay'))return;
+    // Multi-select dropdown (technici)
+    document.querySelectorAll('.ms-dropdown.open').forEach(d=>d.classList.remove('open'));
+    // Notif panel
+    const np=document.getElementById('notif-panel');
+    if(np&&np.style.display==='block'){np.style.display='none';return;}
+    return;
+  }
+  // Skratky používajú Ctrl/Cmd; ak je v inpute, neotvárať Ctrl+N (necháme natívne)
+  // ale pre Ctrl+F chceme override len keď NIE sme v inpute (browser search by tiež otvoril)
+  const tag=(document.activeElement?.tagName||'').toLowerCase();
+  const inInput=tag==='input'||tag==='textarea'||tag==='select'||document.activeElement?.isContentEditable;
+  // Ctrl+N / Cmd+N – nová objednávka
+  if((e.ctrlKey||e.metaKey)&&!e.shiftKey&&!e.altKey&&(e.key==='n'||e.key==='N')){
+    if(currentUser && currentUser.rola!=='technik' && currentUser.rola!=='operátor'){
+      e.preventDefault();
+      switchTab(0);
+      setTimeout(()=>document.getElementById('n-id')?.focus(),50);
+    }
+    return;
+  }
+  // Ctrl+F / Cmd+F – focus do search v Objednávkach (len mimo inputu)
+  if((e.ctrlKey||e.metaKey)&&!e.shiftKey&&!e.altKey&&(e.key==='f'||e.key==='F')){
+    if(!inInput && currentUser && currentUser.rola!=='technik'){
+      e.preventDefault();
+      switchTab(1);
+      setTimeout(()=>{const s=document.getElementById('s-query');if(s){s.focus();s.select();}},50);
+    }
+    return;
+  }
+  // F2 – upraviť označený riadok v Objednávkach
+  if(e.key==='F2'){
+    const sel=document.querySelector('#s-tbody tr.row-selected');
+    if(sel){
+      e.preventDefault();
+      const id=sel.getAttribute('data-id');
+      if(id) otvorEditModal(id);
+    } else if(activeTab===1){
+      toast('💡 Najprv kliknite na riadok ktorý chcete upraviť');
+    }
+    return;
+  }
+});
 </script>
 </body></html>
