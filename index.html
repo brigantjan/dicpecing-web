@@ -916,6 +916,7 @@ function apiToMock(o){
     pozn:      o.poznamky||'',
     farba:     o.farba||'',
     zmeneny:   o.zmeneny||now8(),
+    vytvoreny: o.vytvoreny||'', // kedy bol záznam zapísaný do DB (poradie v "Posledné zapísané")
   };
 }
 
@@ -2102,7 +2103,13 @@ function draftStartAutosave(){
 // ════════════════════════════════════════════════════════════
 function renderRecent(){
   const el=document.getElementById('recent-box');
-  const sorted=[...MOCK_OBJ].sort((a,b)=>b.zmeneny.localeCompare(a.zmeneny)).slice(0,5);
+  // Zoradenie podľa "kedy bol záznam zapísaný do systému" (vytvoreny TIMESTAMPTZ z DB).
+  // Predtým sa triedilo podľa 'zmeneny' (last modified), čo bolo zavádzajúce – stará
+  // objednávka po editácii (uzavretí, storne, oprave poznámky) skákala na vrch hoci
+  // bola zapísaná dávno. Teraz ide naozaj o "naposledy zapísané" objednávky.
+  // Fallback: ak chýba 'vytvoreny' (legacy záznamy), použijeme 'zmeneny' (history vyrobená pri prvom zápise).
+  const keyOf = o => o.vytvoreny || o.zmeneny || '';
+  const sorted=[...MOCK_OBJ].sort((a,b)=>keyOf(b).localeCompare(keyOf(a))).slice(0,5);
   if(!sorted.length){el.innerHTML='<div style="padding:8px 10px;font-size:11px;color:var(--muted)">–</div>';return;}
   el.innerHTML=sorted.map(o=>{
     const mc=o.adresa?o.adresa.split(',').pop().trim():'';
