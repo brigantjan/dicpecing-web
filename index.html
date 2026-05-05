@@ -86,6 +86,9 @@ input,select,textarea,button{font-family:var(--font);font-size:13px}
 #polt-badge{display:none}
 #polt-badge.visible{display:inline-flex!important}
 #polt-badge:hover{filter:brightness(1.1);transform:scale(1.03);transition:all .15s}
+#backup-btn{display:none}
+#backup-btn.visible{display:inline-block!important}
+#backup-btn:hover{background:rgba(255,255,255,.3)!important;transition:background .15s}
 .uname{font-size:12px;font-weight:600;color:#fff}.urola{font-size:10px;color:rgba(255,255,255,.75)}
 .btn-logout{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:12px;transition:all .2s}
 .btn-logout:hover{background:rgba(255,255,255,.25)}
@@ -387,6 +390,11 @@ body[data-role="technik"] #page5 { display:flex!important; flex-direction:column
     <button id="polt-badge" onclick="quickFilterPoLt()" title="Otvorené objednávky po LT – klik pre filter"
             style="display:none;background:var(--red);color:#fff;border:none;border-radius:14px;padding:4px 10px 4px 8px;font-size:11px;font-weight:700;cursor:pointer;align-items:center;gap:5px;letter-spacing:.3px">
       ⚠ <span id="polt-count">0</span> Po LT
+    </button>
+    <!-- Manuálne stiahnutie zálohy (admin/dispečér) – fallback pre cron -->
+    <button id="backup-btn" onclick="dailyBackupExport()" title="Stiahnuť aktuálnu zálohu do Excel-u"
+            style="display:none;background:rgba(255,255,255,.18);color:#fff;border:none;border-radius:14px;padding:4px 10px;font-size:11px;font-weight:600;cursor:pointer;letter-spacing:.3px">
+      💾 Záloha
     </button>
     <button class="notif-btn" onclick="toggleNotif()" id="notif-btn" title="Notifikácie">
       🔔<span class="notif-badge hidden" id="notif-badge">0</span>
@@ -1580,6 +1588,14 @@ function initApp(){
   updateDash();
   updatePoLtBadge(); // globálny indikátor Po LT v topbare
   updateDiagInfo();  // diagnostika v topbare (DB stav)
+  // Tlačidlo "💾 Záloha" – len admin/dispečér
+  const bb=document.getElementById('backup-btn');
+  if(bb){
+    if(rola==='admin'||rola==='dispečér') bb.classList.add('visible');
+    else                                   bb.classList.remove('visible');
+  }
+  // Auto-backup – spustí sa raz za 22h, ticho stiahne .xlsx do Stiahnutých
+  autoBackupCheck();
 }
 function fillTechDatalist(){
   // Technici = z API (TECHNICI) + DEMO_USERS technici + unikátne hodnoty zo zdroj stĺpca
@@ -3004,6 +3020,220 @@ function exportExcel(){
         setStatus(`Export Excel: ${rows.length} záznamov`,'ok');
       });
   }
+}
+
+// ════════════════════════════════════════════════════════════
+// DENNÁ ZÁLOHA (browser-side fallback)
+// Slúži ako poistka voči GitHub Actions cron-u. Pri prihlásení admin/dispečér
+// skontrolujeme localStorage – ak sme dnes (alebo včera) nezálohovali, ticho
+// stiahneme aktuálny stav. Plus tlačidlo "💾 Záloha teraz" v topbare.
+// Generuje sa rovnaký .xlsx formát ako server-side cron pre konzistentnosť.
+// ════════════════════════════════════════════════════════════
+const BACKUP_KEY='dispecing_last_backup_v1';
+
+function _xlsxColForBackup(){
+  // Stĺpce A–M v rovnakom poradí ako server backup.py (a Zriaďovanie_2026.xlsm)
+  return [
+    {h:'ID objednávky',  k:'id_obj'},
+    {h:'Meno zákazníka', k:'meno'},
+    {h:'Adresa',         k:'adresa'},
+    {h:'Typ',            k:'typ'},
+    {h:'Balík',          k:'balik'},
+    {h:'Prijatie',       k:'prijatia',  d:1},
+    {h:'Realizácia',     k:'real',      d:1},
+    {h:'Plán',           k:'plan',      d:1},
+    {h:'Technik',        k:'zdroj'},
+    {h:'LT',             k:'lt',        d:1},
+    {h:'DoLT',           k:'_doLT'},
+    {h:'ADD',            k:'add_txt'},
+    {h:'Poznámky',       k:'pozn'},
+  ];
+}
+
+function _calcDoLtDays(plan, lt){
+  if(!plan||!lt) return '';
+  try{
+    const d=(iso2date(lt)-iso2date(plan))/86400000;
+    return String(Math.round(d));
+  }catch(e){ return ''; }
+}
+
+function dailyBackupExport(opts={}){
+  // opts.silent = true → bez toastu, bez prepínania záložky (pre auto-backup)
+  // opts.filename = vlastný názov súboru (default: dispecing_YYYYMMDD.xlsx)
+  const silent = opts.silent===true;
+  if(!MOCK_OBJ||!MOCK_OBJ.length){
+    if(!silent) toast('⚠ Žiadne záznamy na zálohu');
+    return Promise.resolve(false);
+  }
+  const cols=_xlsxColForBackup();
+  const todayStr=new Date().toISOString().slice(0,10).replace(/-/g,'');
+  const filename = opts.filename || `dispecing_${todayStr}.xlsx`;
+
+  // Farby (ARGB) – ZHODNÉ s server-side backup.py pre vizuálnu konzistenciu
+  const bgMap={'zelena':'FFA5D6A7','zlta':'FFFFF176','modra':'FF90CAF9','':'FFFFFFFF'};
+  const fgMap={'zelena':'FF1B5E20','zlta':'FF6D4C00','modra':'FF0D47A1','':'FF1A1D23'};
+
+  // Stabilné poradie ako v server-side: podľa id_obj
+  const rows=[...MOCK_OBJ].sort((a,b)=>(a.id_obj||'').localeCompare(b.id_obj||''));
+
+  // Štatistika pre Info hárok
+  const todayIso=new Date().toISOString().slice(0,10);
+  const stats={total:rows.length, zelena:0, zlta:0, modra:0, otvorene:0, po_lt:0};
+  rows.forEach(o=>{
+    const f=o.farba||'';
+    if(f==='zelena')stats.zelena++; else if(f==='zlta')stats.zlta++; else if(f==='modra')stats.modra++;
+    if(!o.real && f!=='zlta'){
+      stats.otvorene++;
+      if(o.lt && o.lt<todayIso) stats.po_lt++;
+    }
+  });
+
+  // Pripravíme dáta v rovnakom tvare ako exportExcel
+  const dataRows=rows.map(o=>{
+    const cells=cols.map(c=>{
+      let v;
+      if(c.k==='_doLT') v=_calcDoLtDays(o.plan,o.lt);
+      else if(c.d)      v=fmtD(o[c.k]||'');
+      else              v=o[c.k]||'';
+      return String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    });
+    return {cells, fk:o.farba||''};
+  });
+
+  // OOXML zostavenie (rovnaký prístup ako exportExcel ale dáta z MOCK_OBJ)
+  const headers=cols.map(c=>c.h);
+
+  return new Promise((resolve,reject)=>{
+    const buildXlsx=()=>{
+      try{
+        const zip=new JSZip();
+        const colWidths=[14,22,28,7,8,12,12,12,18,12,7,6,38];
+        const colXml=colWidths.map((w,i)=>`<col min="${i+1}" max="${i+1}" width="${w}" customWidth="1"/>`).join('');
+        // Header row + data rows; Excel používa 1-based row index a A,B,C... pre stĺpce
+        const colLetter=(idx)=>{ let s=''; let n=idx+1; while(n>0){const r=(n-1)%26; s=String.fromCharCode(65+r)+s; n=Math.floor((n-1)/26);} return s; };
+        const rowsXml=[
+          `<row r="1" ht="22" customHeight="1">${headers.map((h,i)=>`<c r="${colLetter(i)}1" t="inlineStr" s="1"><is><t>${h}</t></is></c>`).join('')}</row>`,
+          ...dataRows.map((dr,ri)=>{
+            const r=ri+2;
+            const styleIdx=2+['zelena','zlta','modra',''].indexOf(dr.fk); // 2..5
+            return `<row r="${r}">${dr.cells.map((v,i)=>`<c r="${colLetter(i)}${r}" t="inlineStr" s="${styleIdx}"><is><t>${v}</t></is></c>`).join('')}</row>`;
+          })
+        ].join('');
+        const lastCol=colLetter(headers.length-1);
+        const lastRow=dataRows.length+1;
+        // styles.xml – 6 fontov (header + 4 farby + default), 6 fillov, 6 cellXfs
+        const fonts=[
+          '<font><sz val="11"/><color rgb="FF1A1D23"/><name val="Calibri"/></font>', // 0 default
+          '<font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font>', // 1 header
+          ...['zelena','zlta','modra',''].map(k=>`<font><sz val="10"/><color rgb="${fgMap[k]}"/><name val="Calibri"/></font>`)
+        ].join('');
+        const fills=[
+          '<fill><patternFill patternType="none"/></fill>',
+          '<fill><patternFill patternType="gray125"/></fill>',
+          '<fill><patternFill patternType="solid"><fgColor rgb="FF1565C0"/><bgColor indexed="64"/></patternFill></fill>', // 2 header
+          ...['zelena','zlta','modra',''].map(k=>`<fill><patternFill patternType="solid"><fgColor rgb="${bgMap[k]}"/><bgColor indexed="64"/></patternFill></fill>`)
+        ].join('');
+        const borders='<border><left style="thin"><color rgb="FFD0D7E2"/></left><right style="thin"><color rgb="FFD0D7E2"/></right><top style="thin"><color rgb="FFD0D7E2"/></top><bottom style="thin"><color rgb="FFD0D7E2"/></bottom></border>';
+        // cellXfs:
+        // 0 = default
+        // 1 = header (font 1, fill 2, border 1)
+        // 2..5 = data (font 2..5, fill 3..6, border 1)
+        const cellXfs=[
+          '<xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>',
+          '<xf numFmtId="0" fontId="1" fillId="2" borderId="1" applyFont="1" applyFill="1" applyBorder="1"/>',
+          ...[0,1,2,3].map(i=>`<xf numFmtId="0" fontId="${2+i}" fillId="${3+i}" borderId="1" applyFont="1" applyFill="1" applyBorder="1"/>`)
+        ].join('');
+        const stylesXml=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<fonts count="6">${fonts}</fonts>
+<fills count="7">${fills}</fills>
+<borders count="2"><border/>${borders}</borders>
+<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+<cellXfs count="6">${cellXfs}</cellXfs>
+</styleSheet>`;
+        const sheet1=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<sheetViews><sheetView tabSelected="1" workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>
+<sheetFormatPr defaultRowHeight="15"/>
+<cols>${colXml}</cols>
+<sheetData>${rowsXml}</sheetData>
+<autoFilter ref="A1:${lastCol}${lastRow}"/>
+</worksheet>`;
+        // Info hárok
+        const infoRows=[
+          ['DISPECING · denná záloha',''],
+          ['',''],
+          ['Vytvorené:',  new Date().toISOString().slice(0,19).replace('T',' ')+' UTC'],
+          ['Celkom záznamov:',     String(stats.total)],
+          ['Otvorených:',          String(stats.otvorene)],
+          ['Po LT (otvorené):',    String(stats.po_lt)],
+          ['Uzavretých (zelené):', String(stats.zelena)],
+          ['Stornovaných (žlté):', String(stats.zlta)],
+          ['Pre-rezervovaných (modré):', String(stats.modra)],
+          ['',''],
+          ['Zdroj:', 'Browser-side export (MOCK_OBJ)'],
+          ['Použitie:', 'V prípade výpadku premenuj na Zriaďovanie_2026.xlsm a otvor v Exceli'],
+        ];
+        const infoXml=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+<cols><col min="1" max="2" width="36" customWidth="1"/></cols>
+<sheetData>${infoRows.map((r,i)=>`<row r="${i+1}">${r.map((v,j)=>`<c r="${colLetter(j)}${i+1}" t="inlineStr"${i===0&&j===0?' s="1"':''}><is><t>${String(v).replace(/&/g,'&amp;').replace(/</g,'&lt;')}</t></is></c>`).join('')}</row>`).join('')}</sheetData>
+</worksheet>`;
+        const wbXml='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Zriaďovanie" sheetId="1" r:id="rId1"/><sheet name="Info" sheetId="2" r:id="rId2"/></sheets></workbook>';
+        const wbRels='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>';
+        const contentTypes='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>';
+        const rootRels='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>';
+        zip.file('[Content_Types].xml',contentTypes);
+        zip.folder('_rels').file('.rels',rootRels);
+        zip.folder('xl').file('workbook.xml',wbXml);
+        zip.folder('xl/_rels').file('workbook.xml.rels',wbRels);
+        zip.folder('xl/worksheets').file('sheet1.xml',sheet1);
+        zip.folder('xl/worksheets').file('sheet2.xml',infoXml);
+        zip.folder('xl').file('styles.xml',stylesXml);
+        zip.generateAsync({type:'blob'}).then(blob=>{
+          const a=document.createElement('a');
+          a.href=URL.createObjectURL(blob);
+          a.download=filename;
+          a.click();
+          setTimeout(()=>URL.revokeObjectURL(a.href),1500);
+          // Ulož timestamp poslednej zálohy
+          try{ localStorage.setItem(BACKUP_KEY, new Date().toISOString()); }catch(e){}
+          if(!silent) toast(`✓ Záloha vytvorená: ${rows.length} záznamov`);
+          resolve(true);
+        });
+      }catch(e){ reject(e); }
+    };
+    if(typeof JSZip==='undefined'){
+      const s=document.createElement('script');
+      s.src='https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+      s.onload=buildXlsx;
+      s.onerror=()=>{ if(!silent) toast('⚠ JSZip sa nepodarilo načítať'); reject(new Error('JSZip load failed')); };
+      document.head.appendChild(s);
+    } else { buildXlsx(); }
+  });
+}
+
+function autoBackupCheck(){
+  // Skontroluj posledný timestamp; ak chýba alebo je starší ako 22 hodín, urob ticho zálohu
+  if(!currentUser || (currentUser.rola!=='admin' && currentUser.rola!=='dispečér')) return;
+  let last=null;
+  try{ last=localStorage.getItem(BACKUP_KEY); }catch(e){}
+  const now=new Date();
+  let needsBackup=false;
+  if(!last){ needsBackup=true; }
+  else{
+    const diffH=(now-new Date(last))/3600000;
+    if(diffH>=22) needsBackup=true; // 22h pre flexibilitu okolo polnoci
+  }
+  if(!needsBackup) return;
+  // Počkať pár sekúnd po prihlásení aby sa MOCK_OBJ stihol naplniť
+  setTimeout(()=>{
+    if(!MOCK_OBJ.length) return;
+    dailyBackupExport({silent:true})
+      .then(ok=>{ if(ok) toast('💾 Denná záloha uložená do Stiahnuté'); })
+      .catch(e=>console.warn('Auto-backup zlyhal:',e.message));
+  }, 4000);
 }
 
 // ════════════════════════════════════════════════════════════
