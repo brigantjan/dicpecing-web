@@ -3074,8 +3074,13 @@ function dailyBackupExport(opts={}){
   const bgMap={'zelena':'FFA5D6A7','zlta':'FFFFF176','modra':'FF90CAF9','':'FFFFFFFF'};
   const fgMap={'zelena':'FF1B5E20','zlta':'FF6D4C00','modra':'FF0D47A1','':'FF1A1D23'};
 
-  // Stabilné poradie ako v server-side: podľa id_obj
-  const rows=[...MOCK_OBJ].sort((a,b)=>(a.id_obj||'').localeCompare(b.id_obj||''));
+  // Sortovanie zhodné so server-side backup (backup.py): primárne podľa
+  // datum_prijatia ASC (najstaršie hore, najnovšie dole), sekundárne podľa
+  // id_obj pre stabilné poradie pri zhodnom dátume.
+  const rows=[...MOCK_OBJ].sort((a,b)=>
+    (a.prijatia||'').localeCompare(b.prijatia||'') ||
+    (a.id_obj||'').localeCompare(b.id_obj||'')
+  );
 
   // Štatistika pre Info hárok
   const todayIso=new Date().toISOString().slice(0,10);
