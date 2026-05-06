@@ -1046,6 +1046,25 @@ async function loadTechnici(){
   }catch(e){ console.warn('Technici:', e.message); }
 }
 
+// Map: technik_meno → {skills_typy, skills_baliky, tim_velkost}
+// Použité v: kapacitnom paneli (tim_velkost) a AI agentovi (skills + tim_velkost).
+// Endpoint /api/technici/detail je dostupný všetkým prihláseným (nielen adminovi).
+let TECHNICI_DETAIL = {};
+async function loadTechniciDetail(){
+  try{
+    const rows = await api('GET','/api/technici/detail');
+    TECHNICI_DETAIL = {};
+    (rows||[]).forEach(r => {
+      if(!r.technik_meno) return;
+      TECHNICI_DETAIL[r.technik_meno] = {
+        skills_typy:   r.skills_typy   || '',
+        skills_baliky: r.skills_baliky || '',
+        tim_velkost:   r.tim_velkost   || 1,
+      };
+    });
+  }catch(e){ console.warn('Technici detail:', e.message); }
+}
+
 // Načítaj users z API do DEMO_USERS (pre Správu použ.)
 async function loadUsers(){
   try{
@@ -1392,6 +1411,7 @@ function doLogin(){
     await loadObjednavky();
     await loadNotifikacie();
     await loadTechnici();
+    await loadTechniciDetail();
     if(user.rola==='admin') await loadUsers();
     initApp();
     startPolling();
@@ -2142,6 +2162,19 @@ function isVikendSviatok(iso){
   if(d.getDay()===0||d.getDay()===6)return true;
   return sviatky(d.getFullYear()).has(iso);
 }
+// Helper: vráti veľkosť tímu pre daného technika.
+// Primárne z TECHNICI_DETAIL (dostupné pre všetky role – admin/dispečér/operátor).
+// Fallback na DEMO_USERS (len ak je admin), inak default 1.
+// Weiss=5 → prahy farieb v kapacitnom paneli sa násobia 5×.
+function getTimVelkost(technikMeno){
+  if(!technikMeno) return 1;
+  const td=TECHNICI_DETAIL[technikMeno];
+  if(td && typeof td.tim_velkost==='number' && td.tim_velkost>=1) return td.tim_velkost;
+  const u=(DEMO_USERS||[]).find(u=>u.rola==='technik' && (u.technik_meno||u.meno)===technikMeno);
+  const tv=u?.tim_velkost;
+  return (typeof tv==='number' && tv>=1) ? tv : 1;
+}
+
 function renderCapTbl(f,t){
   const wrap=document.getElementById('cap-wrap');
   const dates=getDates(f,t);
@@ -2162,12 +2195,22 @@ function renderCapTbl(f,t){
   });
   h+=`</tr></thead><tbody>`;
   techs.forEach(tc=>{
-    h+=`<tr><td class="tn">${tc}</td>`;
+    const tim=getTimVelkost(tc);
+    const suffix=tim>1?` <span style="font-size:9px;color:#d97706;font-weight:700;background:#fef3c7;padding:1px 4px;border-radius:3px" title="Vedúci tímu (${tim} technici)">×${tim}</span>`:'';
+    h+=`<tr><td class="tn">${tc}${suffix}</td>`;
     dates.forEach(d=>{
       const vs=isVikendSviatok(d);
       const a=grid[tc]&&grid[tc][d]?grid[tc][d]:[];const v=a.length;
-      const cls=(vs?'wknd-col ':'')+( v===0?'c0':v<=4?'c14':v<=9?'c59':'c10');
-      h+=`<td class="${cls}" data-tip="${a.join('\n')}" onmouseenter="if(this.dataset.tip)showTip(this,this.dataset.tip.replace(/\\n/g,'<br>'))" onmouseleave="hideTip()">${v||'—'}</td>`;
+      // Prahy sa násobia tim_velkost (Weiss tim=5 → ≤20 zel, ≤45 oranž, >45 červ)
+      const prahZ=4*tim, prahO=9*tim;
+      const cls=(vs?'wknd-col ':'')+( v===0?'c0':v<=prahZ?'c14':v<=prahO?'c59':'c10');
+      // Tooltip: pri tíme dopočítaj priemer/technik
+      let tip=a.join('\n');
+      if(tim>1 && v>0){
+        const priemer=(v/tim).toFixed(1);
+        tip=`${v} obj. v ${tim}-člennom tíme (priemer ${priemer}/technik)\n${tip}`;
+      }
+      h+=`<td class="${cls}" data-tip="${tip.replace(/"/g,'&quot;')}" onmouseenter="if(this.dataset.tip)showTip(this,this.dataset.tip.replace(/\\n/g,'<br>'))" onmouseleave="hideTip()">${v||'—'}</td>`;
     });h+=`</tr>`;
   });
   h+=`</tbody></table>`;wrap.innerHTML=h;
@@ -2189,8 +2232,22 @@ function renderPrCapTbl(f,t){
   });
   h+=`</tr></thead><tbody>`;
   techs.forEach(tc=>{
-    h+=`<tr><td class="tn">${tc}</td>`;
-    dates.forEach(d=>{const vs=isVikendSviatok(d);const a=grid[tc]&&grid[tc][d]?grid[tc][d]:[];const v=a.length;const cls=(vs?'wknd-col ':'')+( v===0?'pr0':v===1?'pr1':v<=3?'pr2':'pr3');h+=`<td class="${cls}" data-tip="${a.join('\n')}" onmouseenter="if(this.dataset.tip)showTip(this,this.dataset.tip.replace(/\\n/g,'<br>'))" onmouseleave="hideTip()">${v||'—'}</td>`;});
+    const tim=getTimVelkost(tc);
+    const suffix=tim>1?` <span style="font-size:9px;color:#d97706;font-weight:700;background:#fef3c7;padding:1px 4px;border-radius:3px" title="Vedúci tímu (${tim} technici)">×${tim}</span>`:'';
+    h+=`<tr><td class="tn">${tc}${suffix}</td>`;
+    dates.forEach(d=>{
+      const vs=isVikendSviatok(d);
+      const a=grid[tc]&&grid[tc][d]?grid[tc][d]:[];const v=a.length;
+      // Prahy násobené tim_velkost (Weiss tim=5 → 1=pr1*5=≤5, 2-3=pr2*5=6-15, 4+=pr3*5=≥16)
+      const prah1=1*tim, prah3=3*tim;
+      const cls=(vs?'wknd-col ':'')+( v===0?'pr0':v<=prah1?'pr1':v<=prah3?'pr2':'pr3');
+      let tip=a.join('\n');
+      if(tim>1 && v>0){
+        const priemer=(v/tim).toFixed(1);
+        tip=`${v} pre-rezerv. v ${tim}-člennom tíme (priemer ${priemer}/technik)\n${tip}`;
+      }
+      h+=`<td class="${cls}" data-tip="${tip.replace(/"/g,'&quot;')}" onmouseenter="if(this.dataset.tip)showTip(this,this.dataset.tip.replace(/\\n/g,'<br>'))" onmouseleave="hideTip()">${v||'—'}</td>`;
+    });
     h+=`</tr>`;
   });
   h+=`</tbody></table>`;wrap.innerHTML=h;
@@ -2876,7 +2933,20 @@ function updateUser(idx,field,val){
   if(autoTechMeno) payload.technik_meno=autoTechMeno;
   console.log('PATCH user',u._id, payload);
   api('PATCH',`/api/users/${u._id}`,payload)
-    .then(()=>toast(autoTechMeno?'✓ Uložené (technik_meno predvyplnený)':'✓ Uložené'))
+    .then(()=>{
+      // Synchronizuj TECHNICI_DETAIL (live mapa pre panel a AI agenta)
+      // pri zmene skills/tim_velkost u technika, aby sa zmena prejavila bez F5
+      if(u.rola==='technik' && u.technik_meno && ['skills_typy','skills_baliky','tim_velkost'].includes(field)){
+        TECHNICI_DETAIL[u.technik_meno]={
+          skills_typy:   DEMO_USERS[idx].skills_typy   || '',
+          skills_baliky: DEMO_USERS[idx].skills_baliky || '',
+          tim_velkost:   DEMO_USERS[idx].tim_velkost   || 1,
+        };
+        // Refresh kapacitného panelu ak je otvorený (zmena tim_velkost mení prahy farieb)
+        if(field==='tim_velkost' && document.getElementById('cap-wrap')) refreshCap();
+      }
+      toast(autoTechMeno?'✓ Uložené (technik_meno predvyplnený)':'✓ Uložené');
+    })
     .catch(e=>toast('⚠ Chyba uloženia: '+e.message));
 }
 
