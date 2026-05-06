@@ -1063,6 +1063,9 @@ async function loadUsers(){
         imap_server:  u.imap_server||'posta.suptel.cz',
         imap_email:   u.imap_email||'',
         imap_heslo:   u.imap_heslo||'',  // načítané z API pre admina
+        skills_typy:  u.skills_typy||'',    // CSV: 'M,O,SAT' – pre AI agenta
+        skills_baliky:u.skills_baliky||'',  // CSV: 'M1,M2,SAT' – pre AI agenta
+        tim_velkost:  u.tim_velkost||1,     // 1=jednotlivec, >1=vedúci tímu (Weiss=5)
       }));
       // Zachovaj showPass pre existujúce záznamy, doplň nové
       while(showPass.length<DEMO_USERS.length) showPass.push(false);
@@ -2697,6 +2700,33 @@ function mobZapisozn(id){
 // ════════════════════════════════════════════════════════════
 const ROLE_OPTIONS=['admin','dispečér','technik','operátor'];
 
+// Helper: vytiahne <option> hodnoty z datalistu (dl-typ, dl-balik)
+// Používa sa pre rendering checkboxov v Kvalifikácii technika
+function getDatalistOptions(id){
+  const dl=document.getElementById(id);
+  if(!dl) return [];
+  return [...dl.querySelectorAll('option')].map(o=>o.value).filter(Boolean);
+}
+
+// Helper: prepne checkbox v skills_typy alebo skills_baliky (CSV string)
+// Pridá/odoberie hodnotu zo setu a uloží cez updateUser → API PATCH
+function toggleSkill(idx,field,val,checked){
+  if(idx>=DEMO_USERS.length) return;
+  const cur=new Set((DEMO_USERS[idx][field]||'').split(',').map(s=>s.trim()).filter(Boolean));
+  if(checked) cur.add(val); else cur.delete(val);
+  // Zachová poradie z datalistu (sortBy dl-typ alebo dl-balik)
+  const order=getDatalistOptions(field==='skills_typy'?'dl-typ':'dl-balik');
+  const sorted=[...cur].sort((a,b)=>(order.indexOf(a)+1000*(order.indexOf(a)<0))-(order.indexOf(b)+1000*(order.indexOf(b)<0)));
+  updateUser(idx,field,sorted.join(','));
+  // Vizuálny refresh checkboxu (background/border) bez plného re-renderu tabuľky
+  const lbl=event?.target?.closest('label');
+  if(lbl){
+    const isTyp=(field==='skills_typy');
+    lbl.style.background=checked?(isTyp?'#dbeafe':'#dcfce7'):'#f3f4f6';
+    lbl.style.borderColor=checked?(isTyp?'#60a5fa':'#4ade80'):'#e5e7eb';
+  }
+}
+
 function renderUserTable(){
   const tbody=document.getElementById('user-tbody');
   // Datalist pre technik_meno autocomplete (existujúci technici z viacerých zdrojov)
@@ -2742,6 +2772,38 @@ function renderUserTable(){
             <input value="${u.imap_email||''}" onchange="updateUser(${idx},'imap_email',this.value)" placeholder="${u.email}"></div>
           <div class="field" style="margin:0"><label>Heslo (IMAP)</label>
             <input type="password" value="${u.imap_heslo||''}" onchange="updateUser(${idx},'imap_heslo',this.value)" placeholder="••••••••"></div>
+        </div>
+      </td>
+    </tr>`:u.rola==='technik'?`
+    <tr style="background:#f8f9fc">
+      <td colspan="6" style="padding:4px 12px 8px">
+        <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);margin-bottom:6px">
+          <span class="role-badge role-${u.rola}">${u.rola}</span>
+          🛠 <strong>Kvalifikácia</strong> – čo daný technik zvláda (používa AI agent pri navrhovaní)
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:start">
+          <div class="field" style="margin:0">
+            <label style="font-size:11px;color:var(--muted)">Typy objednávok</label>
+            <div style="display:flex;flex-wrap:wrap;gap:4px;padding:4px;border:1px solid var(--border2);border-radius:5px;background:#fff;min-height:32px">
+              ${getDatalistOptions('dl-typ').map(opt=>{
+                const checked=(u.skills_typy||'').split(',').map(s=>s.trim()).includes(opt);
+                return `<label style="display:inline-flex;align-items:center;gap:3px;font-size:12px;padding:2px 6px;background:${checked?'#dbeafe':'#f3f4f6'};border:1px solid ${checked?'#60a5fa':'#e5e7eb'};border-radius:4px;cursor:pointer;user-select:none"><input type="checkbox" ${checked?'checked':''} onchange="toggleSkill(${idx},'skills_typy','${opt.replace(/'/g,"\\'")}',this.checked)" style="margin:0">${opt}</label>`;
+              }).join('')}
+            </div>
+          </div>
+          <div class="field" style="margin:0">
+            <label style="font-size:11px;color:var(--muted)">Balíky</label>
+            <div style="display:flex;flex-wrap:wrap;gap:4px;padding:4px;border:1px solid var(--border2);border-radius:5px;background:#fff;min-height:32px">
+              ${getDatalistOptions('dl-balik').map(opt=>{
+                const checked=(u.skills_baliky||'').split(',').map(s=>s.trim()).includes(opt);
+                return `<label style="display:inline-flex;align-items:center;gap:3px;font-size:12px;padding:2px 6px;background:${checked?'#dcfce7':'#f3f4f6'};border:1px solid ${checked?'#4ade80':'#e5e7eb'};border-radius:4px;cursor:pointer;user-select:none"><input type="checkbox" ${checked?'checked':''} onchange="toggleSkill(${idx},'skills_baliky','${opt.replace(/'/g,"\\'")}',this.checked)" style="margin:0">${opt}</label>`;
+              }).join('')}
+            </div>
+          </div>
+          <div class="field" style="margin:0;min-width:110px">
+            <label style="font-size:11px;color:var(--muted)" title="Počet technikov pracujúcich pod týmto účtom (1 = jednotlivec, >1 = vedúci tímu)">Veľkosť tímu</label>
+            <input type="number" min="1" max="20" value="${u.tim_velkost||1}" onchange="updateUser(${idx},'tim_velkost',parseInt(this.value)||1)" style="width:100%;padding:5px 8px;border:1px solid ${(u.tim_velkost||1)>1?'#f59e0b':'var(--border2)'};border-radius:5px;background:${(u.tim_velkost||1)>1?'#fffbeb':'#fff'};font-weight:${(u.tim_velkost||1)>1?'600':'400'};text-align:center" title="${(u.tim_velkost||1)>1?'Vedúci tímu – AI agent počíta efektívnu kapacitu = počet objednávok / veľkosť tímu':'Jednotlivec'}">
+          </div>
         </div>
       </td>
     </tr>`:`<tr style="background:#f8f9fc"><td colspan="6" style="padding:2px 12px 5px;font-size:11px;color:var(--muted)"><span class="role-badge role-${u.rola}">${u.rola}</span></td></tr>`}
@@ -2800,7 +2862,14 @@ function updateUser(idx,field,val){
   const payload={};
   if(field==='heslo')      payload['heslo']=val;
   else if(field==='rola')  payload['rola']=rolaApiMap[val]||val;
-  else if(['meno','email','technik_meno','ini','imap_server','imap_email','imap_heslo'].includes(field))
+  else if(field==='tim_velkost'){
+    let iv=parseInt(val);
+    if(isNaN(iv)||iv<1) iv=1;
+    if(iv>20) iv=20;
+    DEMO_USERS[idx].tim_velkost=iv;  // spätná kontrola DOM
+    payload['tim_velkost']=iv;
+  }
+  else if(['meno','email','technik_meno','ini','imap_server','imap_email','imap_heslo','skills_typy','skills_baliky'].includes(field))
     payload[field]=val;
   else return; // neznáme pole
   // Ak sme automaticky doplnili technik_meno, pošleme ho do API spolu s rolou
@@ -2812,13 +2881,14 @@ function updateUser(idx,field,val){
 }
 
 function pridajUsera(){
-  const novy={email:'novy@suptel.sk',heslo:'Heslo123!',meno:'Nový používateľ',rola:'operátor',ini:'NP',technik_meno:'',imap_server:'posta.suptel.cz',imap_email:'',imap_heslo:''};
+  const novy={email:'novy@suptel.sk',heslo:'Heslo123!',meno:'Nový používateľ',rola:'operátor',ini:'NP',technik_meno:'',imap_server:'posta.suptel.cz',imap_email:'',imap_heslo:'',skills_typy:'',skills_baliky:'',tim_velkost:1};
   // Vytvor na API
   const rolaApiMap={'operátor':'operator','dispečér':'dispecer','admin':'admin','technik':'technik'};
   api('POST','/api/users',{
     email:novy.email, meno:novy.meno, heslo:novy.heslo,
     rola:rolaApiMap[novy.rola]||novy.rola,
-    technik_meno:'', ini:'NP', imap_server:'posta.suptel.cz', imap_email:'', imap_heslo:''
+    technik_meno:'', ini:'NP', imap_server:'posta.suptel.cz', imap_email:'', imap_heslo:'',
+    skills_typy:'', skills_baliky:'', tim_velkost:1
   }).then(async r=>{
     novy._id=r.id;
     DEMO_USERS.push(novy);
