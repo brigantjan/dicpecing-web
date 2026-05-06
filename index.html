@@ -456,14 +456,14 @@ body[data-role="technik"] #page5 { display:flex!important; flex-direction:column
         <div class="field"><label>Meno zákazníka</label>
           <input type="text" id="n-meno" onblur="this.value=this.value.trim()" autocomplete="off"></div>
         <div class="field"><label>Adresa</label>
-          <input type="text" id="n-adresa" placeholder="Obec, Ulica číslo" onblur="this.value=this.value.trim()" autocomplete="off"></div>
+          <input type="text" id="n-adresa" placeholder="Obec, Ulica číslo" onblur="this.value=this.value.trim();aiReTrigger()" autocomplete="off"></div>
         <div class="row2">
           <div class="field"><label>Typ</label>
-            <input type="text" id="n-typ" list="dl-typ" placeholder="M/O/E/SAT..." onblur="this.value=this.value.trim()" autocomplete="off">
+            <input type="text" id="n-typ" list="dl-typ" placeholder="M/O/E/SAT..." onblur="this.value=this.value.trim();aiReTrigger()" onchange="aiReTrigger()" autocomplete="off">
             <datalist id="dl-typ"><option>E</option><option>M</option><option>O</option><option>SAT</option><option>DPIV</option><option>DSAT</option><option>PIV</option><option>MX</option><option>PV</option><option>TV</option><option>TV go</option></datalist>
           </div>
           <div class="field"><label>Balík</label>
-            <input type="text" id="n-balik" list="dl-balik" placeholder="M1/O1/SAT..." onblur="this.value=this.value.trim()" autocomplete="off">
+            <input type="text" id="n-balik" list="dl-balik" placeholder="M1/O1/SAT..." onblur="this.value=this.value.trim();aiReTrigger()" onchange="aiReTrigger()" autocomplete="off">
             <datalist id="dl-balik"><option>M1</option><option>M2</option><option>M3</option><option>M4</option><option>M5</option><option>O1</option><option>O2</option><option>O3</option><option>O4</option><option>O5</option><option>O0</option><option>SAT</option><option>SAT+PIV</option><option>DPIV</option><option>DSAT</option><option>PIV</option><option>MX</option><option>mesh</option><option>TV go</option><option>INSTAL</option><option>O</option></datalist>
           </div>
         </div>
@@ -1146,6 +1146,15 @@ function onAddInput(el){
   // Re-trigger AI – hint sa preplánuje podľa ADD stavu (ovplyvňuje text "Daj prerezervovať!")
   aiDone=false;
   const h=document.getElementById('n-ai-hint'); if(h) h.style.display='none';
+  aiTrigger();
+}
+
+// Re-trigger AI agenta po zmene typu/balíka/adresy.
+// Bez tohto by zostal hint zaseknutý na pôvodnom návrhu (lebo aiDone=true po prvom behu).
+function aiReTrigger(){
+  aiDone = false;
+  const h = document.getElementById('n-ai-hint');
+  if(h) h.style.display = 'none';
   aiTrigger();
 }
 // ════════════════════════════════════════════════════════════
@@ -1911,55 +1920,411 @@ function jePracovny(d){const dow=d.getDay();if(dow===0||dow===6)return false;ret
 function prevPracovny(d,min){const x=new Date(d);while(x>=min){if(jePracovny(x))return x;x.setDate(x.getDate()-1);}return null;}
 function nextPracovny(d){const x=new Date(d);for(let i=0;i<14;i++){if(jePracovny(x))return x;x.setDate(x.getDate()+1);}return x;}
 
+// ════════════════════════════════════════════════════════════
+// AI AGENT v2 – konfigurácia, regióny a pomocné funkcie (Fáza D2)
+// ════════════════════════════════════════════════════════════
+const AI_CONFIG = {
+  // Kapacita (× tim_velkost na technika; Weiss tim=5 → cieľ 25, soft 30, hard 40)
+  SOFT_TARGET: 5,    // bežné plánovanie sa snaží neprekročiť
+  SOFT_MAX:    6,    // ADD môže prerásť cez target po SOFT_MAX (varovanie)
+  HARD_MAX:    8,    // tvrdé odmietnutie – nikdy neplánuje
+  // Časové horizonty
+  LT_BUFFER_DAYS:    2,  // ADD cieľ = LT - 2 prac. dni (rezerva na prekvapenia)
+  WEEK_LOOKBACK:     7,  // pre fair-share scoring
+  HISTORY_DAYS:     90,  // úspešnosť za posledné 3 mesiace
+  PLANNING_HORIZON: 30,  // koľko dní dopredu maximálne hľadáme voľnú kapacitu
+  // Weiss – garantovaná zmluvná kvóta pre E+O3 (60% mesačne)
+  WEISS_MENO:    'Weiss Martin',  // POZN: ak sa technik volá inak, treba zmeniť
+  WEISS_TYP:     'E',
+  WEISS_BALIK:   'O3',
+  WEISS_KVOTA:   0.60,
+  // Scoring váhy (negatívne = bonus, pozitívne = penalty → najnižšie skóre vyhráva)
+  W_LOAD_DAY:     5.0,    // efektívna záťaž v cieľový deň (počet/tim_velkost)
+  W_LOAD_WEEK:    1.0,    // záťaž za posledných 7 dní (fair-share)
+  W_HISTORY:     -0.3,    // koľko podobných (typ+balík) úspešne robil → bonus
+  W_REGION:      -7.0,    // bonus ak má v ten deň objednávku v rovnakom regióne
+                          // (Skalité↔Žilina = 1.5h zápchy, geografia má prednosť pred fair-share)
+};
+
+// Geografické regióny – iba okresy ktoré obsluhujeme (Žilina, PB, Kysuce).
+// Ostatné adresy → 'INE' (region scoring sa neaplikuje).
+const AI_REGIONS = {
+  ZILINA: ['Žilina','Bytčica','Strečno','Varín','Teplička','Rajec','Lietavská',
+           'Belá','Terchová','Krasňany','Stráňavy','Lietava','Rosina','Mojš',
+           'Gbeľany','Nezbudská','Dolný Hričov','Horný Hričov','Hričovské',
+           'Divinka','Divina','Svederník','Stránske','Kamenná Poruba'],
+  PB:     ['Považská','Bytča','Pruské','Domaniža','Papradno','Plevník','Beluša',
+           'Predmier','Maršová','Hričov-Selec','Dolná Mariková','Horná Mariková',
+           'Prečín','Jasenica','Udiča','Sverepec','Visolaje'],
+  KYSUCE: ['Čadca','Krásno','Skalité','Svrčinovec','Oščadnica','Turzovka','Raková',
+           'Klokočov','Olešná','Stará Bystrica','Nová Bystrica','Zborov','Korňa',
+           'Kysucké Nové Mesto','Kysucký Lieskovec','Ochodnica','Radôstka','Lodno',
+           'Snežnica','Rudina','Rudinka','Rudinská','Povina','Lopušné Pažite',
+           'Dunajov','Čierne','Makov'],
+};
+
+// Detekcia regiónu z adresy (substring match, case-insensitive). 'INE' ak žiadny match.
+function aiDetectRegion(adresa){
+  if(!adresa) return 'INE';
+  const a = adresa.toLowerCase();
+  for(const [region, keywords] of Object.entries(AI_REGIONS)){
+    if(keywords.some(k => a.includes(k.toLowerCase()))) return region;
+  }
+  return 'INE';
+}
+
+// Test, či je technik dostupný v daný plánovaný deň (zohľadňuje dovolenku/PN)
+function aiTechnikDostupny(meno, planIso){
+  const td = TECHNICI_DETAIL[meno];
+  if(!td) return true;
+  if(!td.na_dovolenke) return true;
+  const od = td.dovolenka_od;
+  const dod = td.dovolenka_do;
+  if(!od) return false;          // master ON bez dátumov = vylúčený
+  if(planIso < od) return true;
+  if(!dod) return false;         // PN do odvolania
+  return planIso > dod;
+}
+
+// Kvalifikácia (typ ∈ skills_typy && balik ∈ skills_baliky)
+function aiTechnikMaSkills(meno, typ, balik){
+  const td = TECHNICI_DETAIL[meno];
+  if(!td) return false;
+  const t = (typ||'').trim();
+  const b = (balik||'').trim();
+  if(!t || !b) return false;
+  const typySet   = new Set((td.skills_typy   || '').split(',').map(s=>s.trim()).filter(Boolean));
+  const balikySet = new Set((td.skills_baliky || '').split(',').map(s=>s.trim()).filter(Boolean));
+  return typySet.has(t) && balikySet.has(b);
+}
+
+// Počet nedokončených objednávok pridelených technikovi v daný plánovaný deň
+function aiPocetObjPreDen(meno, planIso){
+  return MOCK_OBJ.filter(o => o.zdroj===meno && o.plan===planIso && !o.real).length;
+}
+
+// Záťaž za posledných N dní pred refDate (fair-share)
+function aiPocetObjZaTydzen(meno, refIso, dni){
+  const ref = iso2date(refIso);
+  const od = new Date(ref.getTime() - dni*86400000);
+  return MOCK_OBJ.filter(o => {
+    if(o.zdroj!==meno || !o.plan) return false;
+    const d = iso2date(o.plan);
+    return d>=od && d<=ref;
+  }).length;
+}
+
+// Úspešná história: technik už úspešne realizoval typ+balik (bez storna)
+function aiPocetHistoryTypBalik(meno, typ, balik, dni){
+  const t = (typ||'').toLowerCase();
+  const b = (balik||'').toLowerCase();
+  if(!t || !b) return 0;
+  const dnes = iso2date(T);
+  const od = new Date(dnes.getTime() - dni*86400000);
+  return MOCK_OBJ.filter(o => {
+    if(o.zdroj!==meno) return false;
+    if((o.typ||'').toLowerCase()!==t) return false;
+    if((o.balik||'').toLowerCase()!==b) return false;
+    if(!o.real) return false;
+    if(o.farba==='zlta') return false;
+    const d = iso2date(o.real);
+    return d>=od && d<=dnes;
+  }).length;
+}
+
+// Aktuálne percento Weissových E+O3 objednávok prijatých v tomto kalendárnom mesiaci
+// Pre Weissovo zmluvné pravidlo: kým je < 60%, agent ho UPREDNOSTNÍ pri E+O3
+function aiWeissKvotaTentoMesiac(){
+  const dnes = iso2date(T);  // používame globálne T (sync s aplikáciou) – nie new Date()
+  const yr = dnes.getFullYear();
+  const mo = dnes.getMonth();
+  const t = AI_CONFIG.WEISS_TYP.toLowerCase();
+  const b = AI_CONFIG.WEISS_BALIK.toLowerCase();
+  let total=0, weiss=0;
+  MOCK_OBJ.forEach(o => {
+    if(!o.prijatia) return;
+    if((o.typ||'').toLowerCase()!==t) return;
+    if((o.balik||'').toLowerCase()!==b) return;
+    const d = iso2date(o.prijatia);
+    if(d.getFullYear()!==yr || d.getMonth()!==mo) return;
+    total++;
+    if(o.zdroj===AI_CONFIG.WEISS_MENO) weiss++;
+  });
+  return { total, weiss, ratio: total>0 ? weiss/total : 1.0 };
+}
+
+// Cieľový dátum pre ADD: LT - LT_BUFFER_DAYS pracovných dní.
+// Ak LT na víkend/sviatok, posunieme ho na predchádzajúci pracovný (zmluvná logika).
+// Vracia { iso, prekLT } – prekLT=true ak ADD nemôže stihnúť LT.
+function aiCielovyDatum_ADD(ltIso, dnesIso){
+  const lt = iso2date(ltIso);
+  const dnes = iso2date(dnesIso);
+  let ltEff = lt;
+  if(!jePracovny(lt)){
+    const prev = prevPracovny(lt, dnes);
+    if(prev) ltEff = prev;
+  }
+  // Cieľ = LT_eff - LT_BUFFER_DAYS pracovných dní
+  let ciel = new Date(ltEff);
+  let backDays = AI_CONFIG.LT_BUFFER_DAYS;
+  while(backDays>0 && ciel>dnes){
+    ciel.setDate(ciel.getDate()-1);
+    if(jePracovny(ciel)) backDays--;
+  }
+  if(ciel<dnes){
+    const fromToday = nextPracovny(dnes);
+    if(fromToday>ltEff) return { iso: date2iso(fromToday), prekLT: true };
+    ciel = fromToday;
+  }
+  if(!jePracovny(ciel)){
+    const next = nextPracovny(ciel);
+    if(next>ltEff) return { iso: date2iso(next), prekLT: true };
+    ciel = next;
+  }
+  return { iso: date2iso(ciel), prekLT: false };
+}
+
+// Generátor kandidátnych pracovných dní okolo cieľa
+// ADD: cieľ → +1 → -1 → +2 → -2 … (snaha neprerásť LT)
+// Obyčajné: cieľ → -1 → +1 → -2 → +2 … (skôr je vždy lepšie)
+function aiKandidatneDni(cielIso, ltIso, dnesIso, isAdd){
+  const ciel = iso2date(cielIso);
+  const dnes = iso2date(dnesIso);
+  const ltMax = ltIso ? iso2date(ltIso) : null;
+  const limit = new Date(dnes.getTime() + AI_CONFIG.PLANNING_HORIZON*86400000);
+  const dni = [];
+  if(jePracovny(ciel) && ciel>=dnes && ciel<=limit) dni.push(date2iso(ciel));
+  for(let off=1; off<=AI_CONFIG.PLANNING_HORIZON; off++){
+    const plus  = new Date(ciel.getTime()+off*86400000);
+    const minus = new Date(ciel.getTime()-off*86400000);
+    if(isAdd){
+      // ADD: prednostne neskôr (čo najbližšie k LT, ale nie po)
+      if(plus<=limit && plus>=dnes && jePracovny(plus) && (!ltMax||plus<=ltMax)) dni.push(date2iso(plus));
+      if(minus>=dnes && jePracovny(minus)) dni.push(date2iso(minus));
+    } else {
+      if(minus>=dnes && jePracovny(minus)) dni.push(date2iso(minus));
+      if(plus<=limit && plus>=dnes && jePracovny(plus)) dni.push(date2iso(plus));
+    }
+  }
+  return [...new Set(dni)];
+}
+
+// Zoznam kandidátnych technikov pre danú objednávku (po hard filtri).
+// Vracia pole mien ktorí: aktívni, nie na dovolenke v daný deň, majú skills.
+function aiKvalifikovaniTechnici(typ, balik, planIso){
+  return TECHNICI.filter(meno =>
+    aiTechnikMaSkills(meno, typ, balik) &&
+    aiTechnikDostupny(meno, planIso)
+  );
+}
+
+// Hlavné scoring – nižšie skóre = lepší kandidát.
+function aiSkorTechnika(meno, planIso, typ, balik, region){
+  const td = TECHNICI_DETAIL[meno] || {};
+  const tim = td.tim_velkost || 1;
+  // Efektívna záťaž v daný deň (× tim_velkost)
+  const rawDay = aiPocetObjPreDen(meno, planIso);
+  const effDay = rawDay / tim;
+  // Záťaž za týždeň (efektívna)
+  const rawWeek = aiPocetObjZaTydzen(meno, planIso, AI_CONFIG.WEEK_LOOKBACK);
+  const effWeek = rawWeek / tim;
+  // Skúsenosti
+  const hist = aiPocetHistoryTypBalik(meno, typ, balik, AI_CONFIG.HISTORY_DAYS);
+  // Región match: má v ten deň aspoň jednu obj v rovnakom regióne?
+  let regionMatch = 0;
+  if(region!=='INE'){
+    const obDen = MOCK_OBJ.filter(o => o.zdroj===meno && o.plan===planIso && !o.real);
+    regionMatch = obDen.some(o => aiDetectRegion(o.adresa)===region) ? 1 : 0;
+  }
+  return effDay     * AI_CONFIG.W_LOAD_DAY
+       + effWeek    * AI_CONFIG.W_LOAD_WEEK
+       + hist       * AI_CONFIG.W_HISTORY
+       + regionMatch* AI_CONFIG.W_REGION;
+}
+
+// Hlavná rozhodovacia rutina: vyber najlepšieho technika pre cieľový deň + dátum.
+// Vracia objekt { technik, plan, prekLT, dovod } – pri konflikte technik=null.
+// dovod: 'ok' | 'weiss-kvota' | 'no-skills' | 'no-capacity' | 'pre-rezervacia' | 'no-region'
+function aiVyberKandidata(typ, balik, adresa, ltIso, isAdd, dnesIso){
+  const region = aiDetectRegion(adresa);
+  // Cieľový dátum (rôzne stratégie pre ADD vs. obyčajné)
+  let cielIso, prekLTHint=false;
+  if(isAdd && ltIso){
+    const r = aiCielovyDatum_ADD(ltIso, dnesIso);
+    cielIso = r.iso; prekLTHint = r.prekLT;
+  } else {
+    // Obyčajné: použi mediánový delta z histórie podľa typu (zachovaná logika v15)
+    const hist = MOCK_OBJ.filter(o => o.prijatia && o.plan && (!typ || (o.typ||'').toLowerCase()===typ.toLowerCase()));
+    const deltas = hist.map(o => (iso2date(o.plan)-iso2date(o.prijatia))/86400000).sort((a,b)=>a-b);
+    const med = deltas.length ? deltas[Math.floor(deltas.length/2)] : 5;
+    let raw = new Date(iso2date(dnesIso).getTime() + med*86400000);
+    if(!jePracovny(raw)) raw = nextPracovny(raw);
+    cielIso = date2iso(raw);
+  }
+  // Get kandidátov pre cieľový deň
+  const kandidati = aiKvalifikovaniTechnici(typ, balik, cielIso);
+  if(kandidati.length===0){
+    // Zistí, či vôbec existuje niekto so skills (kvôli rozdielnemu hint-u)
+    const ktosiSoSkills = TECHNICI.some(m => aiTechnikMaSkills(m, typ, balik));
+    return { technik: null, plan: cielIso, prekLT: prekLTHint,
+             dovod: ktosiSoSkills ? 'no-capacity' : 'no-skills' };
+  }
+  // Weiss kvóta override pre E+O3
+  const isWeissPravidlo = isAdd
+    ? false  // ADD pravidlo je primárne, Weiss bonus aplikujeme cez scoring
+    : (typ||'').toUpperCase()===AI_CONFIG.WEISS_TYP && (balik||'').toUpperCase()===AI_CONFIG.WEISS_BALIK;
+  // Iterujeme kandidátne dni (cieľ → blízke), hľadáme dvojicu (deň, technik) s najlepším skóre
+  // a kapacitou v rámci limitov
+  const dni = aiKandidatneDni(cielIso, isAdd ? ltIso : null, dnesIso, isAdd);
+  let best = null;
+  for(const den of dni){
+    const den_kand = aiKvalifikovaniTechnici(typ, balik, den);
+    if(den_kand.length===0) continue;
+    // Weiss kvóta override (kontrola pre tento deň)
+    if(isWeissPravidlo && den_kand.includes(AI_CONFIG.WEISS_MENO)){
+      const kv = aiWeissKvotaTentoMesiac();
+      if(kv.ratio < AI_CONFIG.WEISS_KVOTA){
+        // HARD: ak Weiss má kapacitu pod hard_max, vyber Weissa
+        const tim = (TECHNICI_DETAIL[AI_CONFIG.WEISS_MENO]?.tim_velkost) || 1;
+        const raw = aiPocetObjPreDen(AI_CONFIG.WEISS_MENO, den);
+        const eff = raw / tim;
+        if(eff < AI_CONFIG.HARD_MAX){
+          return { technik: AI_CONFIG.WEISS_MENO, plan: den, prekLT: false,
+                   dovod: 'weiss-kvota',
+                   weissInfo: `${kv.weiss}/${kv.total} = ${(kv.ratio*100).toFixed(0)}% (cieľ ≥${(AI_CONFIG.WEISS_KVOTA*100)}%)` };
+        }
+      }
+    }
+    // Bežný scoring: vyber kandidáta s minimálnym skóre, ktorého efektívna záťaž je pod limit
+    for(const meno of den_kand){
+      const td = TECHNICI_DETAIL[meno] || {};
+      const tim = td.tim_velkost || 1;
+      const raw = aiPocetObjPreDen(meno, den);
+      const eff = raw / tim;
+      // Limit: ADD môže do SOFT_MAX, obyčajné len do SOFT_TARGET
+      const limit = isAdd ? AI_CONFIG.SOFT_MAX : AI_CONFIG.SOFT_TARGET;
+      if(eff >= limit) continue;  // tento technik je v ten deň plný
+      const skore = aiSkorTechnika(meno, den, typ, balik, region);
+      // Tie-breaker: pri rovnakom skóre vyhráva ten s menšou týždennou záťažou
+      const tiebreak = aiPocetObjZaTydzen(meno, den, AI_CONFIG.WEEK_LOOKBACK) / tim;
+      if(!best || skore < best.skore - 0.001 || (Math.abs(skore-best.skore)<0.001 && tiebreak < best.tiebreak)){
+        best = { technik: meno, plan: den, skore, tiebreak };
+      }
+    }
+    if(best) return { technik: best.technik, plan: best.plan, prekLT: false, dovod: 'ok',
+                      skore: best.skore.toFixed(2), region };
+  }
+  // Nikto pod limitom – posuňme limit na HARD_MAX a skúsme znova (najmä pre ADD blízko LT)
+  for(const den of dni){
+    const den_kand = aiKvalifikovaniTechnici(typ, balik, den);
+    for(const meno of den_kand){
+      const td = TECHNICI_DETAIL[meno] || {};
+      const tim = td.tim_velkost || 1;
+      const eff = aiPocetObjPreDen(meno, den) / tim;
+      if(eff >= AI_CONFIG.HARD_MAX) continue;
+      const skore = aiSkorTechnika(meno, den, typ, balik, region);
+      if(!best || skore < (best?.skore ?? Infinity)){
+        best = { technik: meno, plan: den, skore };
+      }
+    }
+    if(best) return { technik: best.technik, plan: best.plan, prekLT: prekLTHint, dovod: 'ok-overload',
+                      skore: best.skore.toFixed(2), region };
+  }
+  // Posledný fallback – ADD kde nestíha LT (po-LT plán, pre-rezervácia)
+  if(isAdd && ltIso){
+    const ltDate = iso2date(ltIso);
+    const dnes = iso2date(dnesIso);
+    let p = new Date(Math.max(ltDate.getTime()+86400000, dnes.getTime()));
+    p = nextPracovny(p);
+    return { technik: null, plan: date2iso(p), prekLT: true, dovod: 'pre-rezervacia' };
+  }
+  return { technik: null, plan: cielIso, prekLT: false, dovod: 'no-capacity' };
+}
+
 function aiTrigger(){
   if(aiDone)return;
-  const prijatia=document.getElementById('n-prijatia').value;
-  const lt=document.getElementById('n-lt').value;
-  if(!prijatia||!lt)return;
-  // Mediánový delta z histórie podľa typu
-  const typ=(document.getElementById('n-typ').value||'').toLowerCase();
-  const hist=MOCK_OBJ.filter(o=>o.prijatia&&o.plan&&(!typ||o.typ.toLowerCase()===typ));
-  const deltas=hist.map(o=>(iso2date(o.plan)-iso2date(o.prijatia))/86400000).sort((a,b)=>a-b);
-  const medDelta=deltas.length?deltas[Math.floor(deltas.length/2)]:7;
-  // Best technik z histórie
-  const tc={};
-  MOCK_OBJ.filter(o=>o.zdroj&&(!typ||o.typ.toLowerCase()===typ)).forEach(o=>tc[o.zdroj]=(tc[o.zdroj]||0)+1);
-  const bestTech=Object.entries(tc).sort((a,b)=>b[1]-a[1])[0]?.[0]||'';
-  // ADD='A' rozhoduje, či má zmysel navrhovať prerezerváciu
-  const isAdd=((document.getElementById('n-add').value||'').trim().toUpperCase()==='A');
-  // Výpočet návrhu
-  const prDate=iso2date(prijatia);
-  const ltDate=iso2date(lt);
-  const dnes=new Date();dnes.setHours(0,0,0,0);
-  const ltM1=new Date(ltDate.getTime()-86400000);
-  let rawPlan=new Date(prDate.getTime()+medDelta*86400000);
-  let ltPrek=false,suggPlan;
-  if(rawPlan>=dnes&&rawPlan<=ltM1&&jePracovny(rawPlan)){
-    suggPlan=rawPlan;
-  }else{
-    const prev=prevPracovny(ltM1,dnes);
-    if(prev&&prev<=ltM1){suggPlan=prev;}
-    else{suggPlan=nextPracovny(new Date(ltDate.getTime()+86400000));ltPrek=true;}
+  const prijatia = document.getElementById('n-prijatia').value;
+  const lt       = document.getElementById('n-lt').value;
+  const typ      = (document.getElementById('n-typ').value||'').trim();
+  const balik    = (document.getElementById('n-balik').value||'').trim();
+  const adresa   = (document.getElementById('n-adresa').value||'').trim();
+  const isAdd    = ((document.getElementById('n-add').value||'').trim().toUpperCase()==='A');
+  const hint     = document.getElementById('n-ai-hint');
+
+  // FÁZA 1: prijatia + lt sú minimum pre návrh dátumu
+  if(!prijatia || !lt){
+    hint.style.display='none';
+    return;
   }
-  // CLAMP: plán nikdy do minulosti – minimum je dnes (resp. najbližší pracovný deň od dneška)
-  // Rieši staré objednávky z minulosti, kde aj LT už uplynulo.
-  if(suggPlan<dnes){ suggPlan=nextPracovny(dnes); }
-  aiDone=true;
-  const planIso=date2iso(suggPlan);
+
+  // FÁZA 2: bez typu+balíka navrhneme len DÁTUM (technika nie – nemáme čo filtrovať)
+  if(!typ || !balik){
+    // Mediánový delta z histórie pre cieľový deň (zachovaná logika v15)
+    const histAll = MOCK_OBJ.filter(o => o.prijatia && o.plan);
+    const deltas = histAll.map(o => (iso2date(o.plan)-iso2date(o.prijatia))/86400000).sort((a,b)=>a-b);
+    const med = deltas.length ? deltas[Math.floor(deltas.length/2)] : 5;
+    let raw = new Date(iso2date(prijatia).getTime() + med*86400000);
+    const dnes = iso2date(T);
+    if(raw < dnes) raw = dnes;
+    if(!jePracovny(raw)) raw = nextPracovny(raw);
+    const planEl = document.getElementById('n-plan');
+    if(!planEl.value) planEl.value = date2iso(raw);
+    hint.style.display='block';
+    hint.className='ai-hint';
+    hint.innerHTML = `💡 Návrh dátumu: <strong>${fmtD(date2iso(raw))}</strong> · doplň <em>Typ + Balík</em> pre návrh technika`;
+    return;
+  }
+
+  // FÁZA 3: máme všetky vstupy – plný rozhodovací cyklus
+  const result = aiVyberKandidata(typ, balik, adresa, lt, isAdd, T);
+  aiDone = true;
   // Vždy prepíš plán
-  document.getElementById('n-plan').value=planIso;
-  // Technika len ak prázdny
-  if(bestTech&&!document.getElementById('n-technik').value)document.getElementById('n-technik').value=bestTech;
-  // Hint – návrh prerezervácie len ak ADD='A' (inak prerezervácia nemá zmysel)
-  const hint=document.getElementById('n-ai-hint');
+  document.getElementById('n-plan').value = result.plan;
+  // Technika len ak je v poli prázdno (dispečérka môže manuálne prepísať)
+  const techEl = document.getElementById('n-technik');
+  if(result.technik && !techEl.value) techEl.value = result.technik;
+
+  // Render hint podľa dôvodu rozhodnutia
   hint.style.display='block';
-  hint.className='ai-hint '+(ltPrek?'warn':'ok');
-  if(ltPrek){
-    hint.innerHTML = isAdd
-      ? `⚠ AI návrh → ${bestTech||'–'} | ${fmtD(planIso)} ⚠ <strong>Nesplnenie LT – Daj prerezervovať!</strong>`
-      : `⚠ AI návrh → ${bestTech||'–'} | ${fmtD(planIso)} ⚠ <strong>Plán po LT</strong> (bez prerezervácie – ADD nie je „A")`;
-  } else {
-    hint.innerHTML = `💡 AI návrh → ${bestTech||'–'} | ${fmtD(planIso)} (predvyplnené – môžete prepísať)`;
+  const planFmt = fmtD(result.plan);
+  const regionLbl = result.region && result.region!=='INE' ? ` · región: <strong>${result.region}</strong>` : '';
+
+  if(result.dovod === 'ok'){
+    hint.className = 'ai-hint ok';
+    hint.innerHTML = `💡 AI návrh: <strong>${result.technik}</strong> | <strong>${planFmt}</strong>${regionLbl}`
+                   + ` <span style="color:#94a3b8;font-size:11px">(skóre ${result.skore})</span>`;
+  }
+  else if(result.dovod === 'weiss-kvota'){
+    hint.className = 'ai-hint ok';
+    hint.innerHTML = `🤝 Zmluvné pravidlo: <strong>${result.technik}</strong> | <strong>${planFmt}</strong>`
+                   + ` <span style="color:#94a3b8;font-size:11px">Weiss E+O3 ${result.weissInfo}</span>`;
+  }
+  else if(result.dovod === 'ok-overload'){
+    hint.className = 'ai-hint warn';
+    hint.innerHTML = `⚠ AI návrh: <strong>${result.technik}</strong> | <strong>${planFmt}</strong>${regionLbl}`
+                   + ` <span style="color:#b45309;font-size:11px">– technici sú vyťažení nad cieľovú kapacitu</span>`;
+  }
+  else if(result.dovod === 'no-skills'){
+    hint.className = 'ai-hint warn';
+    hint.innerHTML = `⚠ <strong>Konfliktná objednávka</strong>: žiadny technik nemá v Kvalifikácii ${typ}+${balik}.`
+                   + ` <span style="font-size:11px">Skontroluj nastavenia v Správe používateľov, alebo prirad' technika ručne.</span>`;
+    techEl.value = '';  // nepredplníme
+  }
+  else if(result.dovod === 'no-capacity'){
+    hint.className = 'ai-hint warn';
+    hint.innerHTML = `⚠ <strong>Konfliktná objednávka</strong>: všetci kvalifikovaní technici sú v okne ${planFmt} preťažení (≥ ${AI_CONFIG.HARD_MAX}/deň).`
+                   + ` <span style="font-size:11px">Zváž preplánovanie obyčajnej obj. iného technika alebo prirad' ručne.</span>`;
+    techEl.value = '';
+  }
+  else if(result.dovod === 'pre-rezervacia'){
+    hint.className = 'ai-hint warn';
+    hint.innerHTML = `⚠ <strong>ADD nestíha LT!</strong> Najskorší možný plán: <strong>${planFmt}</strong> (po LT).`
+                   + ` <span style="color:#b91c1c;font-size:11px">→ Pošli na pre-rezerváciu do Slovak Telekomu.</span>`;
+    techEl.value = '';
+  }
+  else {
+    hint.className = 'ai-hint';
+    hint.innerHTML = `💡 Návrh dátumu: <strong>${planFmt}</strong>`;
   }
 }
 
