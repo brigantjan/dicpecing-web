@@ -2144,8 +2144,9 @@ function renderCapTbl(f,t){
   const dates=getDates(f,t);
   const grid={};
   MOCK_OBJ.forEach(o=>{if(!o.plan||o.real||!o.zdroj)return;if(o.plan<f||o.plan>t)return;if(!grid[o.zdroj])grid[o.zdroj]={};if(!grid[o.zdroj][o.plan])grid[o.zdroj][o.plan]=[];if(o.adresa)grid[o.zdroj][o.plan].push(o.adresa);});
-  // Pridáme technikov bez objednávok (ale z TECHNICI zoznamu)
-  TECHNICI.forEach(tc=>{if(!grid[tc])grid[tc]={};});
+  // Zobrazujeme LEN technikov ktorí majú aspoň jednu objednávku v zobrazenom rozsahu.
+  // Pôvodne sa tu pridávali aj prázdne riadky pre VŠETKÝCH z TECHNICI – to spôsobovalo
+  // zobrazenie testovacích/neexistujúcich technikov ako "Nový používateľ" s prázdnym riadkom.
   const techs=Object.keys(grid).sort();
   if(!techs.length){wrap.innerHTML='<div style="padding:12px;color:var(--muted);font-size:11px">Žiadne dáta.</div>';return;}
   let h=`<table class="cap-tbl"><thead><tr><th>Technik</th>`;
