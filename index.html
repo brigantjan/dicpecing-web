@@ -1060,6 +1060,9 @@ async function loadTechniciDetail(){
         skills_typy:   r.skills_typy   || '',
         skills_baliky: r.skills_baliky || '',
         tim_velkost:   r.tim_velkost   || 1,
+        na_dovolenke:  r.na_dovolenke  || 0,
+        dovolenka_od:  r.dovolenka_od  || '',
+        dovolenka_do:  r.dovolenka_do  || '',
       };
     });
   }catch(e){ console.warn('Technici detail:', e.message); }
@@ -1085,6 +1088,9 @@ async function loadUsers(){
         skills_typy:  u.skills_typy||'',    // CSV: 'M,O,SAT' – pre AI agenta
         skills_baliky:u.skills_baliky||'',  // CSV: 'M1,M2,SAT' – pre AI agenta
         tim_velkost:  u.tim_velkost||1,     // 1=jednotlivec, >1=vedúci tímu (Weiss=5)
+        na_dovolenke: u.na_dovolenke||0,    // 0=pracuje, 1=na dovolenke / PN
+        dovolenka_od: u.dovolenka_od||'',   // ISO YYYY-MM-DD, prázdne = od teraz
+        dovolenka_do: u.dovolenka_do||'',   // ISO YYYY-MM-DD, prázdne = do odvolania
       }));
       // Zachovaj showPass pre existujúce záznamy, doplň nové
       while(showPass.length<DEMO_USERS.length) showPass.push(false);
@@ -2784,6 +2790,38 @@ function toggleSkill(idx,field,val,checked){
   }
 }
 
+// Helper: prepne checkbox "Na dovolenke" (na_dovolenke 0/1)
+// Pri zaškrtnutí: zobrazí dátumové polia + nastaví od=dnes ak prázdne
+// Pri odškrtnutí: skryje dátumy a vyčistí ich (cez 3 PATCHe – 1× flag, 2× dátum)
+function toggleDovolenka(idx, checked){
+  if(idx>=DEMO_USERS.length) return;
+  const wrap = document.getElementById('dovolenka-dates-'+idx);
+  if(checked){
+    // Zobraz, ak je od prázdne nastav dnes
+    if(wrap) wrap.style.display='flex';
+    if(!DEMO_USERS[idx].dovolenka_od){
+      const today = new Date().toISOString().slice(0,10);
+      DEMO_USERS[idx].dovolenka_od = today;
+      const odEl = document.getElementById('dov-od-'+idx);
+      if(odEl) odEl.value = today;
+      updateUser(idx, 'dovolenka_od', today);
+    }
+    updateUser(idx, 'na_dovolenke', 1);
+  } else {
+    // Skry + vyčisti
+    if(wrap) wrap.style.display='none';
+    DEMO_USERS[idx].dovolenka_od='';
+    DEMO_USERS[idx].dovolenka_do='';
+    const odEl = document.getElementById('dov-od-'+idx);
+    const doEl = document.getElementById('dov-do-'+idx);
+    if(odEl) odEl.value='';
+    if(doEl) doEl.value='';
+    updateUser(idx, 'na_dovolenke', 0);
+    updateUser(idx, 'dovolenka_od', '');
+    updateUser(idx, 'dovolenka_do', '');
+  }
+}
+
 function renderUserTable(){
   const tbody=document.getElementById('user-tbody');
   // Datalist pre technik_meno autocomplete (existujúci technici z viacerých zdrojov)
@@ -2862,6 +2900,19 @@ function renderUserTable(){
             <input type="number" min="1" max="20" value="${u.tim_velkost||1}" onchange="updateUser(${idx},'tim_velkost',parseInt(this.value)||1)" style="width:100%;padding:5px 8px;border:1px solid ${(u.tim_velkost||1)>1?'#f59e0b':'var(--border2)'};border-radius:5px;background:${(u.tim_velkost||1)>1?'#fffbeb':'#fff'};font-weight:${(u.tim_velkost||1)>1?'600':'400'};text-align:center" title="${(u.tim_velkost||1)>1?'Vedúci tímu – AI agent počíta efektívnu kapacitu = počet objednávok / veľkosť tímu':'Jednotlivec'}">
           </div>
         </div>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:8px;padding:6px 8px;background:${u.na_dovolenke?'#fef3c7':'transparent'};border:1px solid ${u.na_dovolenke?'#f59e0b':'transparent'};border-radius:5px">
+          <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;user-select:none;font-weight:${u.na_dovolenke?'600':'400'}">
+            <input type="checkbox" ${u.na_dovolenke?'checked':''} onchange="toggleDovolenka(${idx},this.checked)" style="margin:0">
+            🏖️ <span>Na dovolenke / PN</span>
+          </label>
+          <div id="dovolenka-dates-${idx}" style="display:${u.na_dovolenke?'flex':'none'};gap:6px;align-items:center;flex:1">
+            <span style="font-size:11px;color:var(--muted)">Od:</span>
+            <input type="date" id="dov-od-${idx}" value="${u.dovolenka_od||''}" onchange="updateUser(${idx},'dovolenka_od',this.value)" style="padding:3px 6px;border:1px solid var(--border2);border-radius:4px;font-size:12px">
+            <span style="font-size:11px;color:var(--muted)">Do:</span>
+            <input type="date" id="dov-do-${idx}" value="${u.dovolenka_do||''}" onchange="updateUser(${idx},'dovolenka_do',this.value)" style="padding:3px 6px;border:1px solid var(--border2);border-radius:4px;font-size:12px">
+            <span style="font-size:10px;color:var(--muted);font-style:italic" title="Prázdne 'Do' = na neurčito (PN)">(prázdne 'Do' = do odvolania)</span>
+          </div>
+        </div>
       </td>
     </tr>`:`<tr style="background:#f8f9fc"><td colspan="6" style="padding:2px 12px 5px;font-size:11px;color:var(--muted)"><span class="role-badge role-${u.rola}">${u.rola}</span></td></tr>`}
   `).join('');
@@ -2926,6 +2977,16 @@ function updateUser(idx,field,val){
     DEMO_USERS[idx].tim_velkost=iv;  // spätná kontrola DOM
     payload['tim_velkost']=iv;
   }
+  else if(field==='na_dovolenke'){
+    const iv = (val===1||val==='1'||val===true) ? 1 : 0;
+    DEMO_USERS[idx].na_dovolenke=iv;
+    payload['na_dovolenke']=iv;
+  }
+  else if(field==='dovolenka_od' || field==='dovolenka_do'){
+    const s = String(val||'').trim();
+    DEMO_USERS[idx][field]=s;
+    payload[field]=s;
+  }
   else if(['meno','email','technik_meno','ini','imap_server','imap_email','imap_heslo','skills_typy','skills_baliky'].includes(field))
     payload[field]=val;
   else return; // neznáme pole
@@ -2935,12 +2996,15 @@ function updateUser(idx,field,val){
   api('PATCH',`/api/users/${u._id}`,payload)
     .then(()=>{
       // Synchronizuj TECHNICI_DETAIL (live mapa pre panel a AI agenta)
-      // pri zmene skills/tim_velkost u technika, aby sa zmena prejavila bez F5
-      if(u.rola==='technik' && u.technik_meno && ['skills_typy','skills_baliky','tim_velkost'].includes(field)){
+      // pri zmene skills/tim_velkost/dovolenka u technika, aby sa zmena prejavila bez F5
+      if(u.rola==='technik' && u.technik_meno && ['skills_typy','skills_baliky','tim_velkost','na_dovolenke','dovolenka_od','dovolenka_do'].includes(field)){
         TECHNICI_DETAIL[u.technik_meno]={
           skills_typy:   DEMO_USERS[idx].skills_typy   || '',
           skills_baliky: DEMO_USERS[idx].skills_baliky || '',
           tim_velkost:   DEMO_USERS[idx].tim_velkost   || 1,
+          na_dovolenke:  DEMO_USERS[idx].na_dovolenke  || 0,
+          dovolenka_od:  DEMO_USERS[idx].dovolenka_od  || '',
+          dovolenka_do:  DEMO_USERS[idx].dovolenka_do  || '',
         };
         // Refresh kapacitného panelu ak je otvorený (zmena tim_velkost mení prahy farieb)
         if(field==='tim_velkost' && document.getElementById('cap-wrap')) refreshCap();
@@ -2951,14 +3015,15 @@ function updateUser(idx,field,val){
 }
 
 function pridajUsera(){
-  const novy={email:'novy@suptel.sk',heslo:'Heslo123!',meno:'Nový používateľ',rola:'operátor',ini:'NP',technik_meno:'',imap_server:'posta.suptel.cz',imap_email:'',imap_heslo:'',skills_typy:'',skills_baliky:'',tim_velkost:1};
+  const novy={email:'novy@suptel.sk',heslo:'Heslo123!',meno:'Nový používateľ',rola:'operátor',ini:'NP',technik_meno:'',imap_server:'posta.suptel.cz',imap_email:'',imap_heslo:'',skills_typy:'',skills_baliky:'',tim_velkost:1,na_dovolenke:0,dovolenka_od:'',dovolenka_do:''};
   // Vytvor na API
   const rolaApiMap={'operátor':'operator','dispečér':'dispecer','admin':'admin','technik':'technik'};
   api('POST','/api/users',{
     email:novy.email, meno:novy.meno, heslo:novy.heslo,
     rola:rolaApiMap[novy.rola]||novy.rola,
     technik_meno:'', ini:'NP', imap_server:'posta.suptel.cz', imap_email:'', imap_heslo:'',
-    skills_typy:'', skills_baliky:'', tim_velkost:1
+    skills_typy:'', skills_baliky:'', tim_velkost:1,
+    na_dovolenke:0, dovolenka_od:'', dovolenka_do:''
   }).then(async r=>{
     novy._id=r.id;
     DEMO_USERS.push(novy);
