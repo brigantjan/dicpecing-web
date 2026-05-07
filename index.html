@@ -484,6 +484,12 @@ body[data-role="technik"] #page5 { display:flex!important; flex-direction:column
           <input type="text" id="n-technik" list="dl-technik" placeholder="Vyberte alebo napíšte..." onblur="this.value=this.value.trim()" autocomplete="off">
           <datalist id="dl-technik"></datalist>
         </div>
+        <div class="field"><label>Telefón zákazníka</label>
+          <div style="display:flex;gap:6px;align-items:stretch">
+            <input type="tel" id="n-telefon" placeholder="napr. 0911 234 567 alebo +421 911..." onblur="this.value=this.value.trim()" autocomplete="off" style="flex:1">
+            <button type="button" class="btn btn-green" onclick="zacniHovor(document.getElementById('n-telefon').value, document.getElementById('n-id').value)" title="Vytočiť cez Phone Link" style="white-space:nowrap;padding:0 12px">📞 Zavolaj</button>
+          </div>
+        </div>
         <div class="field"><label>Poznámky</label>
           <textarea id="n-pozn" rows="2" onblur="this.value=this.value.trim()"></textarea></div>
         <div class="field"><label>Dátum realizácie</label>
@@ -850,6 +856,12 @@ body[data-role="technik"] #page5 { display:flex!important; flex-direction:column
       <div class="mfield" style="padding:0"><label>Plánovaný dátum</label><input type="date" id="e-plan"></div>
     </div>
     <div class="mfield"><label>Pracovný zdroj</label><input type="text" id="e-technik" list="dl-technik" autocomplete="off"></div>
+    <div class="mfield"><label>Telefón zákazníka</label>
+      <div style="display:flex;gap:6px;align-items:stretch">
+        <input type="tel" id="e-telefon" placeholder="napr. 0911 234 567" autocomplete="off" style="flex:1">
+        <button type="button" class="btn btn-green" onclick="zacniHovor(document.getElementById('e-telefon').value, document.getElementById('e-id').value)" title="Vytočiť cez Phone Link" style="white-space:nowrap;padding:6px 12px">📞 Zavolaj</button>
+      </div>
+    </div>
     <div class="mfield"><label>Poznámky</label><textarea id="e-pozn" rows="3"></textarea></div>
     <div class="mfield"><label>Dátum realizácie</label><input type="date" id="e-real"></div>
     <div style="padding:4px 18px">
@@ -915,6 +927,7 @@ function apiToMock(o){
     add_txt:   o.add_txt||'',
     pozn:      o.poznamky||'',
     farba:     o.farba||'',
+    telefon:   o.telefon||'',     // pre tlačidlo Zavolaj
     zmeneny:   o.zmeneny||now8(),
     vytvoreny: o.vytvoreny||'', // kedy bol záznam zapísaný do DB (poradie v "Posledné zapísané")
   };
@@ -936,6 +949,7 @@ function mockToApi(o){
     add_txt:          o.add_txt||'',
     poznamky:         o.pozn||'',
     farba:            o.farba||'',
+    telefon:          o.telefon||'',
   };
 }
 
@@ -1156,6 +1170,68 @@ function aiReTrigger(){
   const h = document.getElementById('n-ai-hint');
   if(h) h.style.display = 'none';
   aiTrigger();
+}
+
+// ════════════════════════════════════════════════════════════
+// HOVOR – tlačidlo „Zavolaj" + audit log
+// Implementácia: tel: URI scheme → Microsoft Phone Link → Bluetooth → Samsung Android.
+// Pripravené pre budúce prepnutie na AI volanie (Twilio) cez HOVOR_REZIM.
+// ════════════════════════════════════════════════════════════
+const HOVOR_REZIM = 'phonelink';  // 'phonelink' | 'ai' (zatiaľ len phonelink)
+
+// Normalizuje telefónne číslo na formát E.164 (+421901234567).
+// Vstupy ako "0911 234 567", "00420 777", "+421-911-234-567" → +421911234567 atď.
+// Vracia '' ak číslo nedáva zmysel.
+function normalizujCislo(s){
+  if(!s) return '';
+  // Ponechá len číslice a znamienko +
+  let raw = String(s).replace(/[^\d+]/g, '');
+  if(!raw) return '';
+  // 00... → +...
+  if(raw.startsWith('00')) raw = '+' + raw.slice(2);
+  // Domáce 0XXX bez kódu → predpokladáme SK +421
+  if(raw.startsWith('0') && !raw.startsWith('00')) raw = '+421' + raw.slice(1);
+  // Ak začína na 9 alebo 421/420 bez +
+  if(!raw.startsWith('+')){
+    if(raw.startsWith('421') || raw.startsWith('420')) raw = '+' + raw;
+    else raw = '+421' + raw;  // bez kódu = SK
+  }
+  return raw;
+}
+
+// Validácia E.164: + plus 9 až 15 číslic
+function jeValidneCislo(s){
+  if(!s || !s.startsWith('+')) return false;
+  const d = s.slice(1);
+  return d.length >= 9 && d.length <= 15 && /^\d+$/.test(d);
+}
+
+// Zaháji hovor zákazníkovi. V phonelink režime spustí tel: URI (Phone Link prevezme).
+// V budúcnosti pri HOVOR_REZIM='ai' zavolá Twilio API endpoint (zatiaľ neimplementované).
+async function zacniHovor(rawCislo, idObj){
+  const cislo = normalizujCislo(rawCislo);
+  if(!jeValidneCislo(cislo)){
+    toast('⚠ Neplatné telefónne číslo: ' + (rawCislo || '(prázdne)'));
+    return;
+  }
+  // Audit log – tichý zápis na pozadí (nezdržuje hovor)
+  api('POST', '/api/hovor/log', {
+    id_obj: idObj || null,
+    cislo:  cislo,
+    vysledok: 'klik',
+    poznamka: 'Phone Link – tel: URI'
+  }).catch(e => console.warn('Hovor log zlyhal:', e.message));
+
+  // Spustenie cez phone link (alebo iný preferred dialer)
+  if(HOVOR_REZIM === 'phonelink'){
+    // window.location.href = 'tel:...' otvorí preferred dialer.
+    // V Win11 s nainštalovaným Phone Link sa spustí vytočenie cez Bluetooth na Androide.
+    window.location.href = 'tel:' + cislo;
+    toast('📞 Volám ' + cislo);
+  } else if(HOVOR_REZIM === 'ai'){
+    // Budúce: AI volanie cez Twilio API
+    toast('🤖 AI volanie zatiaľ nie je implementované');
+  }
 }
 // ════════════════════════════════════════════════════════════
 // BULK SELECTION (Objednávky – hromadné akcie)
@@ -1845,7 +1921,9 @@ function mwfZapis(idx){
   if(it.lt)document.getElementById('n-lt').value=it.lt;
   if(it.termin_d)document.getElementById('n-plan').value=it.termin_d;
   if(it.add)document.getElementById('n-add').value=it.add;
-  if(it.telefon)document.getElementById('n-pozn').value=it.telefon;
+  // Telefón z mailu (extrahovaný z PDF) → nové dedikované pole.
+  // Pôvodne sa vkladal do poznámok (keďže neexistoval samostatný stĺpec).
+  if(it.telefon)document.getElementById('n-telefon').value=it.telefon;
   aiDone=false;document.getElementById('n-ai-hint').style.display='none';
   aiTrigger();
   setStatus(`MWF: predvyplnené – ${it.id_objednavky}`,'info');toast(`Predvyplnené: ${it.id_objednavky}`);
@@ -2405,7 +2483,9 @@ function zapisObjednavku(){
     prijatia:document.getElementById('n-prijatia').value, plan,
     real:document.getElementById('n-real').value, lt,
     zdroj:document.getElementById('n-technik').value.trim(),
-    add_txt, pozn, farba, zmeneny:now8(),
+    add_txt, pozn, farba,
+    telefon:document.getElementById('n-telefon').value.trim(),
+    zmeneny:now8(),
   };
   // Lokálne pridaj okamžite
   if(dup){const i=MOCK_OBJ.findIndex(o=>o.id_obj.toUpperCase()===idObj);if(i>=0)MOCK_OBJ[i]=novyZaznam;}
@@ -2425,7 +2505,7 @@ function zapisObjednavku(){
 }
 
 function vymazatFormu(){
-  ['n-id','n-meno','n-adresa','n-typ','n-balik','n-add','n-pozn','n-technik'].forEach(id=>{const el=document.getElementById(id);if(el){el.value='';el.classList&&el.classList.remove('add-a');}});
+  ['n-id','n-meno','n-adresa','n-typ','n-balik','n-add','n-pozn','n-technik','n-telefon'].forEach(id=>{const el=document.getElementById(id);if(el){el.value='';el.classList&&el.classList.remove('add-a');}});
   ['n-lt','n-plan','n-real'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('n-prijatia').value=T;
   document.querySelectorAll('#n-stav-opts .stav-opt').forEach(o=>o.className='stav-opt');
@@ -2443,7 +2523,7 @@ function vymazatFormu(){
 // Predchádza strate textu pri náhodnom refreshi/páde browser-u.
 // ════════════════════════════════════════════════════════════
 const DRAFT_KEY='dispecing_draft_nova_v1';
-const DRAFT_FIELDS=['n-id','n-meno','n-adresa','n-typ','n-balik','n-prijatia','n-lt','n-add','n-plan','n-technik','n-pozn'];
+const DRAFT_FIELDS=['n-id','n-meno','n-adresa','n-typ','n-balik','n-prijatia','n-lt','n-add','n-plan','n-technik','n-pozn','n-telefon'];
 let draftTimer=null,draftBanner=null;
 function draftSave(){
   try{
@@ -2988,6 +3068,7 @@ function otvorEditModal(id_obj){
   document.getElementById('e-plan').value=o.plan||'';
   document.getElementById('e-technik').value=o.zdroj||'';
   document.getElementById('e-pozn').value=o.pozn||'';
+  document.getElementById('e-telefon').value=o.telefon||'';
   document.getElementById('e-real').value=o.real||'';
   document.getElementById('e-warn').style.display='none';
   const opts=document.querySelectorAll('#e-stav-opts .stav-opt');
@@ -3017,6 +3098,7 @@ function saveEdit(){
   o.typ=document.getElementById('e-typ').value;o.balik=document.getElementById('e-balik').value;
   o.prijatia=document.getElementById('e-prijatia').value;o.lt=lt;o.add_txt=add_txt;
   o.plan=plan;o.zdroj=document.getElementById('e-technik').value;o.pozn=pozn;
+  o.telefon=document.getElementById('e-telefon').value.trim();
   o.real=document.getElementById('e-real').value;o.farba=farba;o.zmeneny=now8();
   toast(`✓ Uložené: ${editCurrentId}`);setStatus(`✓ Zmenené: ${editCurrentId}`,'ok');
   closeEdit();afterEditRefresh();
