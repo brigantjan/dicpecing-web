@@ -2204,11 +2204,18 @@ function aiKandidatneDni(cielIso, ltIso, dnesIso, isAdd){
 
 // Zoznam kandidátnych technikov pre danú objednávku (po hard filtri).
 // Vracia pole mien ktorí: aktívni, nie na dovolenke v daný deň, majú skills.
+// DEFENZÍVNY FILTER: technik bez záznamu v TECHNICI_DETAIL alebo s prázdnymi skills_typy/skills_baliky
+// sa NIKDY nepoužije, aj keby aiTechnikMaSkills prepustil. Zabraňuje regresiám pri dátových
+// anomáliách (napr. "Nový používateľ" pridaný cez admin bez nastavenia kvalifikácie).
 function aiKvalifikovaniTechnici(typ, balik, planIso){
-  return TECHNICI.filter(meno =>
-    aiTechnikMaSkills(meno, typ, balik) &&
-    aiTechnikDostupny(meno, planIso)
-  );
+  return TECHNICI.filter(meno => {
+    const td = TECHNICI_DETAIL[meno];
+    if(!td) return false;                                  // neznámy technik
+    if(!(td.skills_typy||'').trim()) return false;         // prázdne skills_typy → vyradiť
+    if(!(td.skills_baliky||'').trim()) return false;       // prázdne skills_baliky → vyradiť
+    return aiTechnikMaSkills(meno, typ, balik) &&
+           aiTechnikDostupny(meno, planIso);
+  });
 }
 
 // Hlavné scoring – nižšie skóre = lepší kandidát.
@@ -2375,9 +2382,34 @@ function aiTrigger(){
   aiDone = true;
   // Vždy prepíš plán
   document.getElementById('n-plan').value = result.plan;
-  // Technika len ak je v poli prázdno (dispečérka môže manuálne prepísať)
+  // Technika len ak je v poli prázdno (dispečérka môže manuálne prepísať).
+  // Ak agent vráti null (konflikt), n-technik vyčistíme – aj keby sme tam mali zostatok z drafta.
   const techEl = document.getElementById('n-technik');
-  if(result.technik && !techEl.value) techEl.value = result.technik;
+  if(result.technik){
+    if(!techEl.value) techEl.value = result.technik;
+  } else {
+    techEl.value = '';  // pri konflikte nikdy nenechaj zastaranú hodnotu
+  }
+
+  // Detekcia po-LT plánu pre ADD: vždy varovanie "Daj pre-rezervovať!"
+  // (aj keď agent vrátil 'ok' alebo 'ok-overload' s plánom > LT)
+  const isPreRez = isAdd && lt && result.plan && result.plan > lt;
+  const prerezHint = isPreRez
+    ? ` <strong style="color:#b91c1c">⚠ Daj pre-rezervovať!</strong>`
+    : '';
+
+  // Diagnostický log – pomôže identifikovať bugy s "Nový používateľ" a podobne
+  console.log('[AI] návrh →', {
+    typ, balik, adresa, lt, isAdd,
+    technik: result.technik,
+    plan: result.plan,
+    dovod: result.dovod,
+    region: result.region,
+    skore: result.skore,
+    isPreRez,
+    technici_count: TECHNICI.length,
+    technici_detail_keys: Object.keys(TECHNICI_DETAIL),
+  });
 
   // Render hint podľa dôvodu rozhodnutia
   hint.style.display='block';
@@ -2385,37 +2417,37 @@ function aiTrigger(){
   const regionLbl = result.region && result.region!=='INE' ? ` · región: <strong>${result.region}</strong>` : '';
 
   if(result.dovod === 'ok'){
-    hint.className = 'ai-hint ok';
+    hint.className = 'ai-hint ' + (isPreRez ? 'warn' : 'ok');
     hint.innerHTML = `💡 AI návrh: <strong>${result.technik}</strong> | <strong>${planFmt}</strong>${regionLbl}`
-                   + ` <span style="color:#94a3b8;font-size:11px">(skóre ${result.skore})</span>`;
+                   + ` <span style="color:#94a3b8;font-size:11px">(skóre ${result.skore})</span>`
+                   + prerezHint;
   }
   else if(result.dovod === 'weiss-kvota'){
-    hint.className = 'ai-hint ok';
+    hint.className = 'ai-hint ' + (isPreRez ? 'warn' : 'ok');
     hint.innerHTML = `🤝 Zmluvné pravidlo: <strong>${result.technik}</strong> | <strong>${planFmt}</strong>`
-                   + ` <span style="color:#94a3b8;font-size:11px">Weiss E+O3 ${result.weissInfo}</span>`;
+                   + ` <span style="color:#94a3b8;font-size:11px">Weiss E+O3 ${result.weissInfo}</span>`
+                   + prerezHint;
   }
   else if(result.dovod === 'ok-overload'){
     hint.className = 'ai-hint warn';
     hint.innerHTML = `⚠ AI návrh: <strong>${result.technik}</strong> | <strong>${planFmt}</strong>${regionLbl}`
-                   + ` <span style="color:#b45309;font-size:11px">– technici sú vyťažení nad cieľovú kapacitu</span>`;
+                   + ` <span style="color:#b45309;font-size:11px">– technici sú vyťažení nad cieľovú kapacitu</span>`
+                   + prerezHint;
   }
   else if(result.dovod === 'no-skills'){
     hint.className = 'ai-hint warn';
     hint.innerHTML = `⚠ <strong>Konfliktná objednávka</strong>: žiadny technik nemá v Kvalifikácii ${typ}+${balik}.`
                    + ` <span style="font-size:11px">Skontroluj nastavenia v Správe používateľov, alebo prirad' technika ručne.</span>`;
-    techEl.value = '';  // nepredplníme
   }
   else if(result.dovod === 'no-capacity'){
     hint.className = 'ai-hint warn';
     hint.innerHTML = `⚠ <strong>Konfliktná objednávka</strong>: všetci kvalifikovaní technici sú v okne ${planFmt} preťažení (≥ ${AI_CONFIG.HARD_MAX}/deň).`
                    + ` <span style="font-size:11px">Zváž preplánovanie obyčajnej obj. iného technika alebo prirad' ručne.</span>`;
-    techEl.value = '';
   }
   else if(result.dovod === 'pre-rezervacia'){
     hint.className = 'ai-hint warn';
     hint.innerHTML = `⚠ <strong>ADD nestíha LT!</strong> Najskorší možný plán: <strong>${planFmt}</strong> (po LT).`
                    + ` <span style="color:#b91c1c;font-size:11px">→ Pošli na pre-rezerváciu do Slovak Telekomu.</span>`;
-    techEl.value = '';
   }
   else {
     hint.className = 'ai-hint';
@@ -3458,7 +3490,7 @@ function updateUser(idx,field,val){
   if(autoTechMeno) payload.technik_meno=autoTechMeno;
   console.log('PATCH user',u._id, payload);
   api('PATCH',`/api/users/${u._id}`,payload)
-    .then(()=>{
+    .then(async ()=>{
       // Synchronizuj TECHNICI_DETAIL (live mapa pre panel a AI agenta)
       // pri zmene skills/tim_velkost/dovolenka u technika, aby sa zmena prejavila bez F5
       if(u.rola==='technik' && u.technik_meno && ['skills_typy','skills_baliky','tim_velkost','na_dovolenke','dovolenka_od','dovolenka_do'].includes(field)){
@@ -3472,6 +3504,14 @@ function updateUser(idx,field,val){
         };
         // Refresh kapacitného panelu ak je otvorený (zmena tim_velkost mení prahy farieb)
         if(field==='tim_velkost' && document.getElementById('cap-wrap')) refreshCap();
+      }
+      // Po zmene roly alebo technik_meno: kompletný reload zoznamu technikov a ich detailov.
+      // Bez tohto by sa nový technik (alebo bývalý technik) v AI agentovi prejavil až po F5.
+      if(field==='rola' || field==='technik_meno'){
+        try {
+          await loadTechnici();
+          await loadTechniciDetail();
+        } catch(e){ console.warn('Reload TECHNICI po zmene roly zlyhal:', e); }
       }
       toast(autoTechMeno?'✓ Uložené (technik_meno predvyplnený)':'✓ Uložené');
     })
