@@ -839,6 +839,17 @@ body[data-role="technik"] #page5 { display:flex!important; flex-direction:column
     <button class="btn btn-outline btn-xs" onclick="zobrazHistoriu(editCurrentId)" title="História zmien">📋 História</button>
     <button class="btn btn-outline btn-xs" onclick="closeEdit()">✕</button>
   </div>
+  <!-- Lock banner – zobrazený len pri konflikte (read-only mode) -->
+  <div id="edit-lock-banner" style="display:none;padding:10px 14px;background:#fef3c7;border:1px solid #f59e0b;border-radius:6px;margin:8px 14px;font-size:13px;color:#78350f">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+      <div>🔒 <strong id="lock-banner-text">Aktuálne edituje ...</strong> <span id="lock-banner-age" style="color:#92400e;font-size:11px"></span></div>
+      <div style="display:flex;gap:6px">
+        <button type="button" class="btn btn-outline btn-xs" onclick="lockRetry()" title="Skúsiť získať lock znova">🔄 Skúsiť znova</button>
+        <button type="button" id="lock-force-btn" class="btn btn-red btn-xs" onclick="lockForce()" style="display:none" title="Pretlačiť cudzí lock (admin)">🔓 Vziať si lock</button>
+      </div>
+    </div>
+    <div style="margin-top:4px;font-size:11px;color:#92400e">Polia sú zamknuté. Po jeho uložení/zatvorení skús znova.</div>
+  </div>
   <div class="modal-body">
     <div class="mfield"><label>ID objednávky</label><input type="text" id="e-id" class="mono-input" readonly style="opacity:.7;cursor:default"></div>
     <div class="mfield"><label>Meno zákazníka</label><input type="text" id="e-meno" autocomplete="off"></div>
@@ -3080,6 +3091,165 @@ function showNeplan(){
 // ════════════════════════════════════════════════════════════
 // EDIT MODAL
 // ════════════════════════════════════════════════════════════
+// LOCK MANAGER – pesimistický lock pre EditDialog (5 min timeout, 1 min heartbeat)
+// ════════════════════════════════════════════════════════════
+const LockManager = {
+  currentId: null,           // id_obj momentálne zamknutý mnou
+  heartbeatTimer: null,      // setInterval handle
+  isReadOnly: false,         // true ak otvorené v read-only mode (cudzí lock)
+  ownerInfo: null,           // {meno, lock_at, age_sec} pri konflikte
+
+  /** Pokus o získanie locku. Vráti Promise<bool> – true ak úspešné, false ak konflikt.
+   *  Pri konflikte uloží ownerInfo a vyrenderuje banner.
+   *  Pri úspechu zapne heartbeat. */
+  async acquire(id_obj){
+    try {
+      await api('POST', `/api/lock/${encodeURIComponent(id_obj)}`);
+      this.currentId = id_obj;
+      this.isReadOnly = false;
+      this.ownerInfo = null;
+      this._startHeartbeat();
+      this._setReadOnlyUI(false);
+      this._hideBanner();
+      return true;
+    } catch(e){
+      // 409 conflict – api() throw-ne s message obsahujúci JSON detail
+      const m = String(e.message||'').match(/\{.*\}/);
+      let owner = null;
+      if(m){
+        try { const detail = JSON.parse(m[0]); owner = detail.detail?.owner || detail.owner; }
+        catch(_) {}
+      }
+      this.currentId = id_obj;
+      this.isReadOnly = true;
+      this.ownerInfo = owner;
+      this._setReadOnlyUI(true);
+      this._showBanner(owner);
+      return false;
+    }
+  },
+
+  /** Uvoľní môj lock. Volá sa pri close/save. */
+  async release(){
+    if(!this.currentId || this.isReadOnly){
+      this._stopHeartbeat();
+      this.currentId = null;
+      this.isReadOnly = false;
+      this.ownerInfo = null;
+      return;
+    }
+    const id = this.currentId;
+    this._stopHeartbeat();
+    this.currentId = null;
+    try { await api('DELETE', `/api/lock/${encodeURIComponent(id)}`); }
+    catch(e){ console.warn('Lock release zlyhal:', e.message); }
+  },
+
+  /** Force – admin pretláča cudzí lock. */
+  async force(){
+    if(!this.currentId || currentUser?.rola !== 'admin') return;
+    try {
+      await api('POST', `/api/lock/${encodeURIComponent(this.currentId)}/force`);
+      this.isReadOnly = false;
+      this.ownerInfo = null;
+      this._startHeartbeat();
+      this._setReadOnlyUI(false);
+      this._hideBanner();
+      toast('🔓 Lock prevzatý');
+    } catch(e){ toast('⚠ Force lock zlyhal: ' + e.message); }
+  },
+
+  /** Tlačidlo "Skúsiť znova" v banneri. */
+  async retry(){
+    if(!this.currentId) return;
+    const id = this.currentId;
+    const ok = await this.acquire(id);
+    if(ok) toast('✓ Lock získaný – môžeš editovať');
+    // Inak banner sa updatne sám cez _showBanner
+  },
+
+  // ───── Internal heartbeat ─────
+  _startHeartbeat(){
+    this._stopHeartbeat();
+    this.heartbeatTimer = setInterval(async () => {
+      if(!this.currentId || this.isReadOnly) { this._stopHeartbeat(); return; }
+      try { await api('POST', `/api/lock/${encodeURIComponent(this.currentId)}/heartbeat`); }
+      catch(e){
+        console.warn('Heartbeat zlyhal:', e.message);
+        // Ak heartbeat zlyhal s 409 (niekto si vzal lock), prepnúť na read-only
+        if(/409/.test(e.message)){
+          this.isReadOnly = true;
+          this._setReadOnlyUI(true);
+          toast('⚠ Lock prevzal iný používateľ – prepol som do read-only');
+        }
+      }
+    }, 60000); // 1 minúta
+  },
+  _stopHeartbeat(){
+    if(this.heartbeatTimer){ clearInterval(this.heartbeatTimer); this.heartbeatTimer = null; }
+  },
+
+  // ───── Internal UI ─────
+  _setReadOnlyUI(ro){
+    // Disable všetky inputy v edit modali pri read-only, alebo ich uvoľní
+    const ids = ['e-meno','e-adresa','e-typ','e-balik','e-prijatia','e-lt','e-add','e-plan','e-technik','e-pozn','e-telefon','e-real'];
+    ids.forEach(id => {
+      const el = document.getElementById(id);
+      if(el){
+        el.disabled = ro;
+        el.style.opacity = ro ? '0.6' : '';
+        el.style.cursor = ro ? 'not-allowed' : '';
+      }
+    });
+    // Tlačidlá – Save + stav-opty
+    const stavOpts = document.querySelectorAll('#e-stav-opts .stav-opt');
+    stavOpts.forEach(o => o.style.pointerEvents = ro ? 'none' : '');
+    const saveBtn = document.querySelector('#edit-overlay button[onclick="saveEdit()"]');
+    if(saveBtn) saveBtn.disabled = ro;
+  },
+  _showBanner(owner){
+    const banner = document.getElementById('edit-lock-banner');
+    if(!banner) return;
+    banner.style.display = 'block';
+    const txt = document.getElementById('lock-banner-text');
+    const age = document.getElementById('lock-banner-age');
+    const forceBtn = document.getElementById('lock-force-btn');
+    if(owner){
+      txt.textContent = `Aktuálne edituje: ${owner.meno || 'iný používateľ'}`;
+      const ageMin = Math.floor((owner.age_sec||0)/60);
+      const ageSec = (owner.age_sec||0) % 60;
+      age.textContent = ageMin > 0 ? `(pred ${ageMin} min)` : `(pred ${ageSec} s)`;
+    } else {
+      txt.textContent = 'Záznam je zamknutý iným používateľom';
+      age.textContent = '';
+    }
+    // Force tlačidlo iba pre admina
+    if(forceBtn) forceBtn.style.display = (currentUser?.rola === 'admin') ? '' : 'none';
+  },
+  _hideBanner(){
+    const banner = document.getElementById('edit-lock-banner');
+    if(banner) banner.style.display = 'none';
+  },
+};
+
+// Globálne wrappery pre HTML onclick handler-y
+function lockRetry(){ LockManager.retry(); }
+function lockForce(){ LockManager.force(); }
+
+// Pri zatváraní karty/F5 sa pokúsiť uvoľniť lock cez fetch keepalive (best-effort)
+window.addEventListener('beforeunload', () => {
+  if(LockManager.currentId && !LockManager.isReadOnly){
+    try {
+      const url = `${API_URL}/api/lock/${encodeURIComponent(LockManager.currentId)}`;
+      // sendBeacon nepodporuje DELETE, používame fetch s keepalive
+      fetch(url, {method:'DELETE', headers: API_TOKEN?{'Authorization':`Bearer ${API_TOKEN}`}:{}, keepalive: true});
+    } catch(_){}
+  }
+});
+
+// ════════════════════════════════════════════════════════════
+// EDIT DIALOG
+// ════════════════════════════════════════════════════════════
 let editCurrentId=null,editOrigPlan=null,editOrigRez=0;
 function otvorEditModal(id_obj){
   const o=MOCK_OBJ.find(x=>x.id_obj===id_obj);if(!o)return;
@@ -3109,10 +3279,22 @@ function otvorEditModal(id_obj){
   if(ao){if(editStav==='hotova')ao.classList.add('active-h');else if(editStav==='storno')ao.classList.add('active-s');else if(editStav==='prerezerv')ao.classList.add('active-p');else ao.classList.add('active-pl');}
   document.getElementById('edit-title').textContent=`Úprava – ${id_obj}`;
   document.getElementById('edit-overlay').classList.add('open');
+  // Pokus o získanie locku – asynchrónne, dialóg je už otvorený
+  // Pri konflikte sa banner zobrazí a polia sa zablokujú (read-only mode B)
+  LockManager.acquire(id_obj);
 }
-function closeEdit(){document.getElementById('edit-overlay').classList.remove('open');}
+function closeEdit(){
+  // Pri zatvorení uvoľni lock (asynchrónne, neblokuje UI)
+  LockManager.release();
+  document.getElementById('edit-overlay').classList.remove('open');
+}
 function closeEditIfBg(ev){if(ev.target===document.getElementById('edit-overlay'))closeEdit();}
 function saveEdit(){
+  // Defenzíva: ak sme v read-only mode (cudzí lock), save nepovolíme
+  if(LockManager.isReadOnly){
+    toast('🔒 Nemôžeš uložiť – záznam je zamknutý iným používateľom');
+    return;
+  }
   const oi=MOCK_OBJ.findIndex(o=>o.id_obj===editCurrentId);if(oi<0)return;
   const w=document.getElementById('e-warn');
   if(editStav==='storno'&&!document.getElementById('e-pozn').value.trim()){w.style.display='block';w.textContent='⚠ Storno vyžaduje dôvod v Poznámkach!';return;}
