@@ -1933,6 +1933,8 @@ const AI_CONFIG = {
   WEEK_LOOKBACK:     7,  // pre fair-share scoring
   HISTORY_DAYS:     90,  // úspešnosť za posledné 3 mesiace
   PLANNING_HORIZON: 30,  // koľko dní dopredu maximálne hľadáme voľnú kapacitu
+  // Cutoff – po ktorej hodine sa už dnešok vyradí z kandidátov (technik nestihne začať)
+  CUTOFF_HOUR:       9,  // 09:00 → po tejto hodine plán najskôr zajtra (resp. najbližší pracovný)
   // Weiss – garantovaná zmluvná kvóta pre E+O3 (60% mesačne)
   WEISS_MENO:    'Weiss Martin',  // POZN: ak sa technik volá inak, treba zmeniť
   WEISS_TYP:     'E',
@@ -1971,6 +1973,19 @@ function aiDetectRegion(adresa){
     if(keywords.some(k => a.includes(k.toLowerCase()))) return region;
   }
   return 'INE';
+}
+
+// Najnižší prípustný dátum plánu (kvôli cutoff – po 09:00 už dnes nezvládneme).
+// Vstup: nowHour (voliteľné) – pre testovanie môžeme nasimulovať konkrétny čas.
+// V produkcii sa volá bez parametra → použije reálny system čas.
+function aiMinPlanDate(nowHour){
+  if(typeof nowHour === 'undefined') nowHour = new Date().getHours();
+  let minDate = iso2date(T);
+  if(nowHour >= AI_CONFIG.CUTOFF_HOUR){
+    minDate = new Date(minDate.getTime() + 86400000);  // posun na zajtra
+  }
+  if(!jePracovny(minDate)) minDate = nextPracovny(minDate);
+  return date2iso(minDate);
 }
 
 // Test, či je technik dostupný v daný plánovaný deň (zohľadňuje dovolenku/PN)
@@ -2264,8 +2279,9 @@ function aiTrigger(){
     const deltas = histAll.map(o => (iso2date(o.plan)-iso2date(o.prijatia))/86400000).sort((a,b)=>a-b);
     const med = deltas.length ? deltas[Math.floor(deltas.length/2)] : 5;
     let raw = new Date(iso2date(prijatia).getTime() + med*86400000);
-    const dnes = iso2date(T);
-    if(raw < dnes) raw = dnes;
+    // Clamp na najnižší prípustný dátum (rešpektuje cutoff – pred 09:00 dnes, po 09:00 zajtra)
+    const minDate = iso2date(aiMinPlanDate());
+    if(raw < minDate) raw = minDate;
     if(!jePracovny(raw)) raw = nextPracovny(raw);
     const planEl = document.getElementById('n-plan');
     if(!planEl.value) planEl.value = date2iso(raw);
@@ -2276,7 +2292,8 @@ function aiTrigger(){
   }
 
   // FÁZA 3: máme všetky vstupy – plný rozhodovací cyklus
-  const result = aiVyberKandidata(typ, balik, adresa, lt, isAdd, T);
+  // Posielame aiMinPlanDate() namiesto T → agent nikdy nenavrhne dnes po 09:00
+  const result = aiVyberKandidata(typ, balik, adresa, lt, isAdd, aiMinPlanDate());
   aiDone = true;
   // Vždy prepíš plán
   document.getElementById('n-plan').value = result.plan;
