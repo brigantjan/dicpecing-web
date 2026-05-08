@@ -977,7 +977,7 @@ function startPolling(){
     if(!API_TOKEN||!currentUser)return;
     try{
       const cb=Date.now();
-      let url=`/api/objednavky?limit=2000&_cb=${cb}`;
+      let url=`/api/objednavky?limit=10000&_cb=${cb}`;
       if(currentUser?.rola==='technik'&&currentUser.technik_meno){
         url+=`&zdroj=${encodeURIComponent(currentUser.technik_meno)}`;
       }
@@ -1023,7 +1023,7 @@ async function loadObjednavky(){
     setStatus('Načítavam objednávky...','info');
     const cb=Date.now();
     // Technik vidí len SVOJE objednávky – filter podľa zdroj
-    let url=`/api/objednavky?limit=2000&_cb=${cb}`;
+    let url=`/api/objednavky?limit=10000&_cb=${cb}`;
     if(currentUser?.rola==='technik'&&currentUser.technik_meno){
       url+=`&zdroj=${encodeURIComponent(currentUser.technik_meno)}`;
     }
