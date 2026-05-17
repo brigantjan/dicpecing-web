@@ -474,11 +474,15 @@ body[data-role="technik"] #page5 { display:flex!important; flex-direction:column
           <div class="field"><label>LT</label>
             <input type="date" id="n-lt" onblur="aiTrigger()" onchange="aiTrigger()"></div>
         </div>
-        <div class="row3">
-          <div class="field"><label>ADD</label>
+        <div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:6px">
+          <div class="field" style="flex:0 0 58px"><label>ADD</label>
             <input type="text" id="n-add" placeholder="A" style="text-transform:uppercase" maxlength="2" oninput="onAddInput(this)"></div>
-          <div class="field" style="grid-column:span 2"><label>Plánovaný dátum</label>
+          <div class="field" style="flex:1;min-width:110px"><label>Plánovaný dátum</label>
             <input type="date" id="n-plan"></div>
+          <div class="field" style="flex:0 0 108px"><label>Od</label>
+            <select id="n-cas-od" onchange="onCasOdChange('n')"></select></div>
+          <div class="field" style="flex:0 0 88px"><label>Do</label>
+            <input type="text" id="n-cas-do" readonly placeholder="auto" style="background:#f3f4f6;color:#555;cursor:default"></div>
         </div>
         <div class="field"><label>Pracovný zdroj</label>
           <input type="text" id="n-technik" list="dl-technik" placeholder="Vyberte alebo napíšte..." onblur="this.value=this.value.trim()" autocomplete="off">
@@ -900,9 +904,11 @@ body[data-role="technik"] #page5 { display:flex!important; flex-direction:column
       <div class="mfield" style="padding:0"><label>Dátum prijatia</label><input type="date" id="e-prijatia"></div>
       <div class="mfield" style="padding:0"><label>LT</label><input type="date" id="e-lt"></div>
     </div>
-    <div class="mrow-tiny">
+    <div style="display:grid;grid-template-columns:70px 1fr 108px 88px;gap:8px;padding:3px 18px">
       <div class="mfield" style="padding:0"><label>ADD</label><input type="text" id="e-add" style="text-transform:uppercase" maxlength="2"></div>
       <div class="mfield" style="padding:0"><label>Plánovaný dátum</label><input type="date" id="e-plan"></div>
+      <div class="mfield" style="padding:0"><label>Od</label><select id="e-cas-od" onchange="onCasOdChange('e')"></select></div>
+      <div class="mfield" style="padding:0"><label>Do</label><input type="text" id="e-cas-do" readonly placeholder="auto" style="background:#f3f4f6;color:#555;cursor:default"></div>
     </div>
     <div class="mfield"><label>Pracovný zdroj</label><input type="text" id="e-technik" list="dl-technik" autocomplete="off"></div>
     <div class="mfield"><label>Telefón zákazníka</label>
@@ -990,6 +996,8 @@ function apiToMock(o){
     telefon:   o.telefon||'',     // pre tlačidlo Zavolaj
     zmeneny:   o.zmeneny||now8(),
     vytvoreny: o.vytvoreny||'', // kedy bol záznam zapísaný do DB (poradie v "Posledné zapísané")
+    cas_od:    o.cas_od||'',
+    cas_do:    o.cas_do||'',
   };
 }
 
@@ -1010,6 +1018,8 @@ function mockToApi(o){
     poznamky:         o.pozn||'',
     farba:            o.farba||'',
     telefon:          o.telefon||'',
+    cas_od:           o.cas_od||null,
+    cas_do:           o.cas_do||null,
   };
 }
 
@@ -1165,6 +1175,8 @@ async function loadUsers(){
         na_dovolenke: u.na_dovolenke||0,    // 0=pracuje, 1=na dovolenke / PN
         dovolenka_od: u.dovolenka_od||'',   // ISO YYYY-MM-DD, prázdne = od teraz
         dovolenka_do: u.dovolenka_do||'',   // ISO YYYY-MM-DD, prázdne = do odvolania
+        technik_email: u.technik_email||'',
+        technik_email_notify: u.technik_email_notify||0,
       }));
       // Zachovaj showPass pre existujúce záznamy, doplň nové
       while(showPass.length<DEMO_USERS.length) showPass.push(false);
@@ -1713,6 +1725,7 @@ function fillMobTechnik(){
 function initApp(){
   const rola=currentUser?.rola||'dispečér';
   document.getElementById('n-prijatia').value=T;
+  _casOdSel('n'); _casOdSel('e'); // inicializuj časové selecty
   document.getElementById('p-datum').value=T;  // defaultne dnes
   document.getElementById('mob-datum').value=T;
   document.getElementById('cap-from').value=T;
@@ -2591,6 +2604,9 @@ function zapisObjednavku(){
   if(add_txt==='A'&&plan&&lt&&plan>lt&&currentStavNova!=='hotova'&&currentStavNova!=='storno'){
     farba='modra';pozn=`REZ01, z ${fmtRezD(lt)} na ${fmtRezD(plan)}`;
   }
+  _casOdSel('n');
+  const nCasOd=(document.getElementById('n-cas-od')||{}).value||'';
+  const nCasDo=(document.getElementById('n-cas-do')||{}).value||'';
   const novyZaznam={
     id_obj:idObj, meno:document.getElementById('n-meno').value.trim(),
     adresa:document.getElementById('n-adresa').value.trim(),
@@ -2601,14 +2617,35 @@ function zapisObjednavku(){
     zdroj:document.getElementById('n-technik').value.trim(),
     add_txt, pozn, farba,
     telefon:document.getElementById('n-telefon').value.trim(),
-    zmeneny:now8(),
+    zmeneny:now8(), cas_od:nCasOd, cas_do:nCasDo,
   };
+  // Upozornenie na prekrývajúce sa časové okno
+  if(nCasOd&&novyZaznam.zdroj&&novyZaznam.plan){
+    const k=checkCasOverlap(novyZaznam.zdroj,novyZaznam.plan,nCasOd,nCasDo,null);
+    if(k) toast(`⚠ Prekryv: ${novyZaznam.zdroj} má ${k.cas_od}–${k.cas_do} (${k.id_obj})`);
+  }
   // Lokálne pridaj okamžite
   if(dup){const i=MOCK_OBJ.findIndex(o=>o.id_obj.toUpperCase()===idObj);if(i>=0)MOCK_OBJ[i]=novyZaznam;}
   else MOCK_OBJ.push(novyZaznam);
   mwfAfterZapisOk();
   toast(`✓ Zapísaná: ${idObj}`);setStatus(`✓ Zapísaná: ${idObj}`,'ok');
   logHistoria(idObj, 'zapis', `Zápis: ${novyZaznam.meno}, ${novyZaznam.adresa}, plán: ${novyZaznam.plan||'–'}, technik: ${novyZaznam.zdroj||'–'}`);
+  // Email technikovi cez Outlook ak má zapnuté notifikácie
+  if(novyZaznam.zdroj){
+    const _nt=DEMO_USERS.find(u=>u.technik_meno===novyZaznam.zdroj&&u.technik_email_notify&&u.technik_email);
+    if(_nt){
+      const _pf=novyZaznam.plan?fmtD(novyZaznam.plan):'–';
+      const _ct=novyZaznam.cas_od?` a časovým oknom ${novyZaznam.cas_od} – ${novyZaznam.cas_do}`:'';
+      const _subj=`Pridelená objednávka: ${novyZaznam.meno} – ${novyZaznam.adresa}`;
+      const _bod=`Dobrý deň,\n\nbola Vám pridelená objednávka s plánovaným termínom realizácie ${_pf}${_ct}.\n\nID: ${idObj}\nZákazník: ${novyZaznam.meno}\nAdresa: ${novyZaznam.adresa}\nTyp: ${novyZaznam.typ} | Balík: ${novyZaznam.balik}\nLT: ${novyZaznam.lt||'–'}\n\nDISPECING SUPTEL`;
+      const _a=document.createElement('a');
+      _a.href=`mailto:${_nt.technik_email}?subject=${encodeURIComponent(_subj)}&body=${encodeURIComponent(_bod)}`;
+      _a.style.display='none';
+      document.body.appendChild(_a);
+      _a.click();
+      setTimeout(()=>_a.parentNode&&_a.parentNode.removeChild(_a),1000);
+    }
+  }
   vymazatFormu();renderRecent();
   const cfv2=document.getElementById('cap-from')?.value||T;
   const ctv2=document.getElementById('cap-to')?.value||dt(9);
@@ -2624,6 +2661,8 @@ function zapisObjednavku(){
 function vymazatFormu(){
   ['n-id','n-meno','n-adresa','n-typ','n-balik','n-add','n-pozn','n-technik','n-telefon'].forEach(id=>{const el=document.getElementById(id);if(el){el.value='';el.classList&&el.classList.remove('add-a');}});
   ['n-lt','n-plan','n-real'].forEach(id=>document.getElementById(id).value='');
+  const nOd=document.getElementById('n-cas-od');if(nOd)nOd.value='';
+  const nDo=document.getElementById('n-cas-do');if(nDo)nDo.value='';
   document.getElementById('n-prijatia').value=T;
   document.querySelectorAll('#n-stav-opts .stav-opt').forEach(o=>o.className='stav-opt');
   currentStavNova='';aiDone=false;pendingDup=null;
@@ -2762,7 +2801,7 @@ function renderCapTbl(f,t){
   const wrap=document.getElementById('cap-wrap');
   const dates=getDates(f,t);
   const grid={};
-  MOCK_OBJ.forEach(o=>{if(!o.plan||o.real||!o.zdroj)return;if(o.plan<f||o.plan>t)return;if(!grid[o.zdroj])grid[o.zdroj]={};if(!grid[o.zdroj][o.plan])grid[o.zdroj][o.plan]=[];if(o.adresa)grid[o.zdroj][o.plan].push(o.adresa);});
+  MOCK_OBJ.forEach(o=>{if(!o.plan||o.real||!o.zdroj)return;if(o.plan<f||o.plan>t)return;if(!grid[o.zdroj])grid[o.zdroj]={};if(!grid[o.zdroj][o.plan])grid[o.zdroj][o.plan]=[];const tipItem=o.cas_od?`${o.adresa||''} ${o.cas_od}–${o.cas_do}`:(o.adresa||'');if(tipItem)grid[o.zdroj][o.plan].push(tipItem);});
   // Zobrazujeme LEN technikov ktorí majú aspoň jednu objednávku v zobrazenom rozsahu.
   // Pôvodne sa tu pridávali aj prázdne riadky pre VŠETKÝCH z TECHNICI – to spôsobovalo
   // zobrazenie testovacích/neexistujúcich technikov ako "Nový používateľ" s prázdnym riadkom.
@@ -3378,6 +3417,10 @@ function otvorEditModal(id_obj){
   document.getElementById('e-lt').value=o.lt||'';
   document.getElementById('e-add').value=o.add_txt||'';
   document.getElementById('e-plan').value=o.plan||'';
+  _casOdSel('e');
+  const eOd=document.getElementById('e-cas-od');
+  if(eOd)eOd.value=o.cas_od||'';
+  document.getElementById('e-cas-do').value=o.cas_do||'';
   document.getElementById('e-technik').value=o.zdroj||'';
   document.getElementById('e-pozn').value=o.pozn||'';
   document.getElementById('e-telefon').value=o.telefon||'';
@@ -3424,8 +3467,32 @@ function saveEdit(){
   o.plan=plan;o.zdroj=document.getElementById('e-technik').value;o.pozn=pozn;
   o.telefon=document.getElementById('e-telefon').value.trim();
   o.real=document.getElementById('e-real').value;o.farba=farba;o.zmeneny=now8();
+  o.cas_od=document.getElementById('e-cas-od')?.value||'';
+  o.cas_do=document.getElementById('e-cas-do')?.value||'';
+  // Upozornenie na prekrývajúce sa časové okno
+  if(o.cas_od&&o.zdroj&&o.plan){
+    const k=checkCasOverlap(o.zdroj,o.plan,o.cas_od,o.cas_do,editCurrentId);
+    if(k) toast(`⚠ Prekryv: ${o.zdroj} má ${k.cas_od}–${k.cas_do} (${k.id_obj})`);
+  }
   toast(`✓ Uložené: ${editCurrentId}`);setStatus(`✓ Zmenené: ${editCurrentId}`,'ok');
   closeEdit();afterEditRefresh();
+  // Email technikovi cez Outlook (mailto:) ak sa zmenil technik a má zapnuté notifikácie
+  if(o.zdroj && (editOrigObj?.zdroj||'')!==o.zdroj){
+    const _tech=DEMO_USERS.find(u=>u.technik_meno===o.zdroj&&u.technik_email_notify&&u.technik_email);
+    if(_tech){
+      const _planFmt=o.plan?fmtD(o.plan):'–';
+      const _casText=o.cas_od?` a časovým oknom ${o.cas_od} – ${o.cas_do}`:'';
+      const _subj=`Pridelená objednávka: ${o.meno} – ${o.adresa}`;
+      const _body=`Dobrý deň,\n\nbola Vám pridelená objednávka s plánovaným termínom realizácie ${_planFmt}${_casText}.\n\nID: ${editCurrentId}\nZákazník: ${o.meno}\nAdresa: ${o.adresa}\nTyp: ${o.typ} | Balík: ${o.balik}\nLT: ${o.lt||'–'}\n\nDISPECING SUPTEL`;
+      const _a=document.createElement('a');
+      _a.href=`mailto:${_tech.technik_email}?subject=${encodeURIComponent(_subj)}&body=${encodeURIComponent(_body)}`;
+      _a.style.display='none';
+      document.body.appendChild(_a);
+      _a.click();
+      setTimeout(()=>_a.parentNode&&_a.parentNode.removeChild(_a),1000);
+      toast(`📧 Email pre ${_tech.technik_meno} odoslaný do Outlooku`);
+    }
+  }
   // ── Granulárne logovanie histórie ──────────────────────────
   if(farba==='zelena'){
     logHistoria(editCurrentId,'uzavretie',`Uzavretie: realizácia ${o.real||T}`);
@@ -3821,9 +3888,19 @@ function renderUserTable(){
             <span style="font-size:10px;color:var(--muted);font-style:italic" title="Prázdne 'Do' = na neurčito (PN)">(prázdne 'Do' = do odvolania)</span>
           </div>
         </div>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:6px;padding:6px 8px;background:${u.technik_email_notify?'#eff6ff':'transparent'};border:1px solid ${u.technik_email_notify?'#93c5fd':'transparent'};border-radius:5px">
+          <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;user-select:none;white-space:nowrap;font-weight:${u.technik_email_notify?'600':'400'}">
+            <input type="checkbox" ${u.technik_email_notify?'checked':''} onchange="updateUser(${idx},'technik_email_notify',this.checked?1:0);const _ei=document.getElementById('te-inp-${idx}');if(_ei)_ei.style.background=this.checked?'#fff':'#f9fafb';" style="margin:0">
+            ✉️ <span>Zasielať emaily objednávok</span>
+          </label>
+          <input id="te-inp-${idx}" type="email" value="${u.technik_email||''}" onblur="updateUser(${idx},'technik_email',this.value)" placeholder="email technika..." style="flex:1;padding:4px 8px;border:1px solid var(--border2);border-radius:5px;font-size:12px;background:${u.technik_email_notify?'#fff':'#f9fafb'}">
+        </div>
       </td>
     </tr>`:`<tr style="background:#f8f9fc"><td colspan="6" style="padding:2px 12px 5px;font-size:11px;color:var(--muted)"><span class="role-badge role-${u.rola}">${u.rola}</span></td></tr>`}
-  `).join('');
+  `).join(`
+    <tr><td colspan="6" style="padding:0;height:6px;background:linear-gradient(90deg,transparent,#6366f1 30%,#6366f1 70%,transparent);opacity:0.25"></td></tr>
+    <tr><td colspan="6" style="padding:0;height:2px"></td></tr>
+  `);
 }
 // QR kód pre mobilné testovanie – modal v aplikácii
 function showQR(){
@@ -3895,8 +3972,13 @@ function updateUser(idx,field,val){
     DEMO_USERS[idx][field]=s;
     payload[field]=s;
   }
-  else if(['meno','email','technik_meno','ini','imap_server','imap_email','imap_heslo','skills_typy','skills_baliky'].includes(field))
+  else if(['meno','email','technik_meno','ini','imap_server','imap_email','imap_heslo','skills_typy','skills_baliky','technik_email'].includes(field))
     payload[field]=val;
+  else if(field==='technik_email_notify'){
+    const iv=(val===1||val==='1'||val===true)?1:0;
+    DEMO_USERS[idx].technik_email_notify=iv;
+    payload[field]=iv;
+  }
   else return; // neznáme pole
   // Ak sme automaticky doplnili technik_meno, pošleme ho do API spolu s rolou
   if(autoTechMeno) payload.technik_meno=autoTechMeno;
@@ -4427,7 +4509,35 @@ function vykonatHromadnaZmena(){
 }
 
 // ════════════════════════════════════════════════════════════
-// ── Denný sumár ─────────────────────────────────────────────
+// ── Časové okno realizácie (cas_od / cas_do) ─────────────────
+const CAS_OD_OPTS='<option value="">—</option>'+
+  ['06:00','06:30','07:00','07:30','08:00','08:30','09:00','09:30',
+   '10:00','10:30','11:00','11:30','12:00','12:30','13:00','13:30',
+   '14:00','14:30','15:00','15:30','16:00','16:30','17:00','17:30','18:00']
+  .map(t=>`<option value="${t}">${t}</option>`).join('');
+
+function addTwoHours(t){
+  if(!t)return '';
+  const[h,m]=t.split(':').map(Number);
+  const tot=h*60+m+120;
+  return `${String(Math.floor(tot/60)).padStart(2,'0')}:${String(tot%60).padStart(2,'0')}`;
+}
+function onCasOdChange(prefix){
+  const od=(document.getElementById(prefix+'-cas-od')||{}).value||'';
+  const doFld=document.getElementById(prefix+'-cas-do');
+  if(doFld)doFld.value=od?addTwoHours(od):'';
+}
+function checkCasOverlap(technik,plan,casOd,casDo,excludeId){
+  if(!casOd||!technik||!plan)return null;
+  return MOCK_OBJ.find(o=>
+    o.id_obj!==excludeId&&o.zdroj===technik&&o.plan===plan&&
+    o.cas_od&&o.cas_do&&o.cas_od<casDo&&casOd<o.cas_do
+  )||null;
+}
+function _casOdSel(prefix){
+  const s=document.getElementById(prefix+'-cas-od');
+  if(s&&!s.innerHTML)s.innerHTML=CAS_OD_OPTS;
+}
 const _DS_AKCIA={zapis:'Zápis',zmena:'Zmena',uzavretie:'Uzavretie',storno:'Storno',prerezerv:'Prerezervácia',email:'Email',poznamka:'Poznámka'};
 const _DS_COLOR={zapis:'#dcfce7',zmena:'#f1f5f9',uzavretie:'#bbf7d0',storno:'#fef9c3',prerezerv:'#dbeafe',email:'#f3e8ff',poznamka:'#fff'};
 
