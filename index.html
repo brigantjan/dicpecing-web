@@ -11,7 +11,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="DISPECING">
-<title>DISPECING – SUPTEL ŽILINA</title>
+<title>DISPECING – SUPTEL</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
@@ -258,6 +258,11 @@ body[data-role="technik"] .tabbar,
 body[data-role="technik"] #statusbar,
 body[data-role="technik"] .dash-section,
 body[data-role="technik"] #notif-btn { display:none!important }
+/* ─── VEDENIE – skryť Nová a Mobil ──────────────────────── */
+body[data-role="vedenie"] #tb0,
+body[data-role="vedenie"] #tb5,
+body[data-role="vedenie"] #snav0,
+body[data-role="vedenie"] #snav5 { display:none!important }
 /* Mobile dropdown – rozbalené <option> musia mať tmavý text na bielom pozadí.
    Inak sa color:#fff zo selectu prenesie aj do options a v rozbalenom popupe
    (ktoré je biele) sú mená neviditeľné kým nie sú highlighted. */
@@ -350,7 +355,7 @@ body[data-role="technik"] #page5 { display:flex!important; flex-direction:column
 <!-- ═══════════════ LOGIN ═══════════════ -->
 <div id="login-screen">
 <div class="lcard">
-  <div class="llogo"><div class="lt">DISPECING</div><div class="ls">SUPTEL ŽILINA · Správa zriaďovacích objednávok</div></div>
+  <div class="llogo"><div class="lt">DISPECING</div><div class="ls">SUPTEL · Správa zriaďovacích objednávok</div></div>
   <div class="fg"><label>Email</label><input type="email" id="l-email" placeholder="email@suptel.sk" autocomplete="off"></div>
   <div class="fg"><label>Heslo</label><input type="password" id="l-pass" placeholder="Heslo" autocomplete="off"></div>
   <button class="btnp" onclick="doLogin()">Prihlásiť sa</button>
@@ -361,7 +366,7 @@ body[data-role="technik"] #page5 { display:flex!important; flex-direction:column
 <div id="app">
 <!-- SIDEBAR -->
 <div class="sidebar">
-  <div class="sidebar-brand"><div class="sb-logo">DISPECING</div><div class="sb-sub">SUPTEL ŽILINA</div></div>
+  <div class="sidebar-brand"><div class="sb-logo">DISPECING</div><div class="sb-sub" id="sb-sub">SUPTEL</div></div>
   <div class="sidebar-nav">
     <div class="sb-nav-lbl">Navigácia</div>
     <div class="sb-nav-item active" id="snav0" onclick="switchTab(0)"><span class="icon">➕</span>Nová objednávka</div>
@@ -382,7 +387,7 @@ body[data-role="technik"] #page5 { display:flex!important; flex-direction:column
   <!-- TOPBAR -->
   <div class="topbar" style="position:relative">
     <div class="topbar-title">DISPECING <span style="font-weight:300;font-size:12px;opacity:.8">· Zriaďovanie</span></div>
-    <div class="topbar-file" id="topbar-file">SUPTEL ŽILINA</div>
+    <div class="topbar-file" id="topbar-file">SUPTEL</div>
     <!-- Diagnostika (admin/dispečér) – stav DB -->
     <div id="diag-info" style="font-size:11px;color:rgba(255,255,255,.85);font-family:var(--mono);padding:0 8px;display:none" title="Stav databázy"></div>
     <div class="tsep"></div>
@@ -399,7 +404,7 @@ body[data-role="technik"] #page5 { display:flex!important; flex-direction:column
     <button class="notif-btn" onclick="toggleNotif()" id="notif-btn" title="Notifikácie">
       🔔<span class="notif-badge hidden" id="notif-badge">0</span>
     </button>
-    <div class="user-pill"><div class="uav" id="uav">JB</div><div><div class="uname" id="uname">Ján Brigant</div><div class="urola" id="urola">dispečér</div></div></div>
+    <div class="user-pill"><div class="uav" id="uav">JB</div><div><div class="uname" id="uname">Ján Brigant</div><div class="urola" id="urola">dispečér</div><div id="ustredisko" style="font-size:10px;color:rgba(255,255,255,.55);margin-top:1px;letter-spacing:.3px"></div></div></div>
     <button class="btn-logout" onclick="doLogout()">Odhlásiť</button>
     <!-- Notif panel -->
     <div class="notif-panel" id="notif-panel">
@@ -572,7 +577,15 @@ body[data-role="technik"] #page5 { display:flex!important; flex-direction:column
       <button id="btn-denny-sumar" class="btn btn-outline btn-xs" onclick="showDennySumar()" style="padding:5px 10px;font-size:12px;white-space:nowrap;display:none">📑 Denný sumár</button>
       <button class="btn btn-outline btn-xs" onclick="exportMesacnyVykaz()" style="padding:5px 10px;font-size:12px;white-space:nowrap">📋 Mesačný výkaz</button>
       <button class="btn btn-green btn-xs" onclick="exportExcel()" title="Exportovať zobrazené záznamy do Excelu" style="padding:5px 12px;font-size:12px;font-weight:600;white-space:nowrap">📥 Export Excel</button>
-      <button class="btn btn-outline btn-xs" onclick="zobrazNapovedu()" title="Nápoveda – klávesové skratky" style="padding:5px 10px;font-size:12px;white-space:nowrap">⌨ Skratky</button>
+      <button id="btn-skratky" class="btn btn-outline btn-xs" onclick="zobrazNapovedu()" title="Nápoveda – klávesové skratky" style="padding:5px 10px;font-size:12px;white-space:nowrap">⌨ Skratky</button>
+    </div>
+    <!-- Filter strediska – viditeľný len pre vedenie -->
+    <div id="vedenie-st-bar" style="display:none;padding:5px 10px;background:#f0f4ff;border-bottom:1px solid var(--border);align-items:center;gap:6px;font-size:12px;flex-wrap:wrap">
+      <span style="font-weight:600;color:var(--accent)">🏢 Stredisko:</span>
+      <div class="quick-btn active" id="vsb-vsetky" onclick="vedenieFilterSt('vsetky')">Všetky</div>
+      <div class="quick-btn" id="vsb-zilina"      onclick="vedenieFilterSt('zilina')">Žilina</div>
+      <div class="quick-btn" id="vsb-bratislava"  onclick="vedenieFilterSt('bratislava')">Bratislava</div>
+      <div class="quick-btn" id="vsb-trencin"     onclick="vedenieFilterSt('trencin')">Trenčín</div>
     </div>
     <!-- Bulk action panel – zobrazí sa keď je niečo označené -->
     <div id="bulk-bar" style="display:none;background:#fff8e1;border-bottom:1px solid #ffca28;padding:6px 12px;align-items:center;gap:8px;font-size:12px">
@@ -639,7 +652,7 @@ body[data-role="technik"] #page5 { display:flex!important; flex-direction:column
       <span style="font-size:12px;color:var(--muted)">Dátum:</span>
       <input type="date" id="p-datum" onchange="showPlan()" style="border:1px solid var(--border2);border-radius:5px;padding:5px 9px;color:var(--text);background:#fff;outline:none">
       <span class="sum-lbl" id="p-sum"></span>
-      <button class="btn btn-outline" onclick="otvorHromadnaZmena()" style="margin-left:auto;font-size:12px" title="Hromadná zmena technika pre vybraný deň">⇄ Hromadná zmena technika</button>
+      <button id="btn-hromadna-zmena" class="btn btn-outline" onclick="otvorHromadnaZmena()" style="margin-left:auto;font-size:12px" title="Hromadná zmena technika pre vybraný deň">⇄ Hromadná zmena technika</button>
     </div>
     <div class="tbl-wrap">
       <table class="tbl" id="p-tbl">
@@ -679,7 +692,7 @@ body[data-role="technik"] #page5 { display:flex!important; flex-direction:column
   <div class="tab-page" id="page3" style="flex-direction:column">
     <div class="ctrl-bar">
       <button class="btn btn-accent" onclick="showPrerezerv()">↻ Obnoviť</button>
-      <button class="btn btn-red" onclick="emailPrerezerv()">📧 Generuj email pre označené</button>
+      <button id="btn-generuj-email" class="btn btn-red" onclick="emailPrerezerv()">📧 Generuj email pre označené</button>
       <span class="sum-lbl" id="pr-sum"></span>
     </div>
     <div class="tbl-wrap">
@@ -727,7 +740,7 @@ body[data-role="technik"] #page5 { display:flex!important; flex-direction:column
       <table class="user-tbl" id="user-tbl">
         <thead><tr>
           <th>Meno</th><th>Email (login)</th><th>Heslo</th><th>Rola</th>
-          <th>Meno technika (pre mobil)</th><th style="width:60px">Akcie</th>
+          <th>Meno technika (pre mobil)</th><th>Stredisko</th><th style="width:60px">Akcie</th>
         </tr></thead>
         <tbody id="user-tbody"></tbody>
       </table>
@@ -998,6 +1011,7 @@ function apiToMock(o){
     vytvoreny: o.vytvoreny||'', // kedy bol záznam zapísaný do DB (poradie v "Posledné zapísané")
     cas_od:    o.cas_od||'',
     cas_do:    o.cas_do||'',
+    stredisko: o.stredisko||'zilina',
   };
 }
 
@@ -1177,6 +1191,7 @@ async function loadUsers(){
         dovolenka_do: u.dovolenka_do||'',   // ISO YYYY-MM-DD, prázdne = do odvolania
         technik_email: u.technik_email||'',
         technik_email_notify: u.technik_email_notify||0,
+        stredisko:    u.stredisko||'zilina',
       }));
       // Zachovaj showPass pre existujúce záznamy, doplň nové
       while(showPass.length<DEMO_USERS.length) showPass.push(false);
@@ -1346,11 +1361,15 @@ function bulkUpdateBar(){
   if(cnt>0){
     bar.classList.add('show');
     document.getElementById('bulk-count').textContent=`${cnt} označen${cnt===1?'á':cnt<5?'é':'ých'}`;
+    // Vedenie: skryť tlačidlo Priradiť technika (read-only)
+    const btnPriradit=bar.querySelector('button[onclick="bulkPriraditTechnika()"]');
+    if(btnPriradit) btnPriradit.style.display=(currentUser?.rola==='vedenie')?'none':'';
   } else {
     bar.classList.remove('show');
   }
 }
 function bulkPriraditTechnika(){
+  if(currentUser?.rola==='vedenie'){toast('⚠ Vedenie má len čítací prístup');return;}
   if(!bulkSelected.size){toast('⚠ Žiadne objednávky označené');return;}
   // Použijeme rovnaký zoznam technikov ako pri Hromadnej zmene
   const fromUsers=(DEMO_USERS||[]).filter(u=>u.rola==='technik').map(u=>u.technik_meno||u.meno).filter(Boolean);
@@ -1398,10 +1417,24 @@ function bulkExportSelected(){
   finally{ hidden.forEach(([tr,prev])=>{ tr.style.display=prev||''; }); }
 }
 let quickMode='all';
+let vedenieSt='vsetky'; // filter strediska pre rolu vedenie
 let _sTimer=null;
+function vedenieFilterSt(st){
+  vedenieSt=st;
+  document.querySelectorAll('[id^="vsb-"]').forEach(b=>b.classList.remove('active'));
+  document.getElementById('vsb-'+st)?.classList.add('active');
+  // Aktualizuj SUPTEL label v topbare aj sidebari
+  const lbl = st==='vsetky' ? 'SUPTEL' : `SUPTEL ${(STREDISKO_LABEL[st]||st).toUpperCase()}`;
+  document.getElementById('topbar-file').textContent = lbl;
+  document.getElementById('sb-sub').textContent = lbl;
+  renderObjTable();
+  updateDash();
+  updateDiagInfo();
+  updatePoLtBadge();
+}
 function quickFilter(mode){
   quickMode=mode;
-  document.querySelectorAll('.quick-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('[id^="qb-"]').forEach(b=>b.classList.remove('active'));
   const btn=document.getElementById('qb-'+mode);
   if(btn) btn.classList.add('active');
   // Vždy resetuj modálny datumFilter (z Po-LT badge alebo dátum-filter modal).
@@ -1435,7 +1468,7 @@ function dashClickFilter(mode){
   // Potom prepni quick mód na požadovaný typ
   if(mode!=='all'){
     quickMode=mode;
-    document.querySelectorAll('.quick-btn').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('[id^="qb-"]').forEach(b=>b.classList.remove('active'));
     const btn=document.getElementById('qb-'+mode);
     if(btn) btn.classList.add('active');
     renderObjTable();
@@ -1450,7 +1483,10 @@ function updatePoLtBadge(){
   const badge=document.getElementById('polt-badge');
   if(!badge) return;
   if(currentUser?.rola==='technik'){badge.classList.remove('visible');return;}
-  const cnt=MOCK_OBJ.filter(isPoLt).length;
+  const src=(currentUser?.rola==='vedenie'&&vedenieSt!=='vsetky')
+    ? MOCK_OBJ.filter(o=>(o.stredisko||'zilina')===vedenieSt)
+    : MOCK_OBJ;
+  const cnt=src.filter(isPoLt).length;
   document.getElementById('polt-count').textContent=cnt;
   if(cnt>0) badge.classList.add('visible');
   else      badge.classList.remove('visible');
@@ -1464,7 +1500,7 @@ function quickFilterPoLt(){
   quickFilter('all'); // úplný reset
   // Teraz nastav 'neukoncene' bez prerenderu (urobíme jeden render až po datumFilter)
   quickMode='neukoncene';
-  document.querySelectorAll('.quick-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('[id^="qb-"]').forEach(b=>b.classList.remove('active'));
   const btn=document.getElementById('qb-neukoncene');
   if(btn) btn.classList.add('active');
   // Aplikuj rozšírený dátumový filter: LT do včerajška vrátane
@@ -1482,10 +1518,17 @@ function quickFilterPoLt(){
 function updateDiagInfo(){
   const el=document.getElementById('diag-info');
   if(!el) return;
-  if(currentUser?.rola!=='admin'&&currentUser?.rola!=='dispečér'){el.style.display='none';return;}
-  const objCnt=MOCK_OBJ.length;
-  const techCnt=[...new Set([...(TECHNICI||[]),...((DEMO_USERS||[]).filter(u=>u.rola==='technik').map(u=>u.technik_meno||u.meno).filter(Boolean))])].length;
+  if(!['admin','dispečér','vedenie'].includes(currentUser?.rola)){el.style.display='none';return;}
+  const src=(currentUser?.rola==='vedenie'&&vedenieSt!=='vsetky')
+    ? MOCK_OBJ.filter(o=>(o.stredisko||'zilina')===vedenieSt)
+    : MOCK_OBJ;
+  const objCnt=src.length;
   const online=navigator.onLine;
+  // Technici – pre vedenie filtruj podľa strediska ak je zvolené
+  const techSrc=(currentUser?.rola==='vedenie'&&vedenieSt!=='vsetky')
+    ? (DEMO_USERS||[]).filter(u=>u.rola==='technik'&&(u.stredisko||'zilina')===vedenieSt)
+    : (DEMO_USERS||[]).filter(u=>u.rola==='technik');
+  const techCnt=[...new Set([...(currentUser?.rola==='vedenie'&&vedenieSt!=='vsetky'?[]:TECHNICI||[]),...techSrc.map(u=>u.technik_meno||u.meno).filter(Boolean)])].length;
   el.innerHTML=`📊 ${objCnt} obj · 👤 ${techCnt} tech · ${online?'<span style="color:#a5d6a7">●</span> online':'<span style="color:#ffab91">●</span> offline'}`;
   el.style.display='block';
   el.title=`Databáza: ${objCnt} objednávok · ${techCnt} aktívnych technikov · Stav siete: ${online?'online':'offline'}`;
@@ -1541,7 +1584,7 @@ function doLogin(){
   api('POST','/api/login',{email,heslo:pass}).then(async data=>{
     API_TOKEN=data.token;
     // Normalizácia roly – API vracia bez diakritiky (operator, dispecer)
-    const rolaMap={'operator':'operátor','dispecer':'dispečér','admin':'admin','technik':'technik'};
+    const rolaMap={'operator':'operátor','dispecer':'dispečér','admin':'admin','technik':'technik','vedenie':'vedenie'};
     const rola=rolaMap[data.user.rola]||data.user.rola;
     const user={
       email:        data.user.email,
@@ -1550,6 +1593,7 @@ function doLogin(){
       ini:          data.user.ini,
       technik_meno: data.user.technik_meno||'',
       heslo:        pass,
+      stredisko:    data.user.stredisko||'zilina',
     };
     currentUser=user;
     // Reset MWF fronty pri každom novom prihlásení
@@ -1557,6 +1601,11 @@ function doLogin(){
     document.getElementById('uav').textContent=user.ini;
     document.getElementById('uname').textContent=user.meno;
     document.getElementById('urola').textContent=user.rola;
+    const STREDISKO_LABEL={'zilina':'Žilina','bratislava':'Bratislava','trencin':'Trenčín'};
+    const stLabel = STREDISKO_LABEL[user.stredisko] || user.stredisko;
+    document.getElementById('ustredisko').textContent = stLabel;
+    document.getElementById('sb-sub').textContent = `SUPTEL ${stLabel.toUpperCase()}`;
+    document.getElementById('topbar-file').textContent = `SUPTEL ${stLabel.toUpperCase()}`;
     document.getElementById('login-screen').style.display='none';
     document.getElementById('app').classList.add('visible');
 
@@ -1565,6 +1614,17 @@ function doLogin(){
       document.querySelector('.sidebar')?.setAttribute('style','display:none');
       document.querySelector('.tabbar')?.setAttribute('style','display:none');
       document.getElementById('statusbar')?.setAttribute('style','display:none');
+    } else if(user.rola==='vedenie'){
+      document.body.setAttribute('data-role','vedenie');
+      // Vedenie: skryť tab Nová (0) a Mobil (5), začať na Objednávkach, zobraziť filter strediska
+      document.getElementById('tb0')?.style.setProperty('display','none');
+      document.getElementById('tb5')?.style.setProperty('display','none');
+      document.getElementById('snav0')?.style.setProperty('display','none');
+      document.getElementById('snav5')?.style.setProperty('display','none');
+      document.getElementById('btn-skratky')?.style.setProperty('display','none');
+      document.getElementById('btn-hromadna-zmena')?.style.setProperty('display','none');
+      document.getElementById('btn-generuj-email')?.style.setProperty('display','none');
+      document.getElementById('vedenie-st-bar').style.display='flex';
     } else {
       document.body.removeAttribute('data-role');
     }
@@ -1575,7 +1635,7 @@ function doLogin(){
     await loadNotifikacie();
     await loadTechnici();
     await loadTechniciDetail();
-    if(user.rola==='admin') await loadUsers();
+    if(user.rola==='admin'||user.rola==='vedenie') await loadUsers();
     initApp();
     startPolling();
     setStatus(`Prihlásený: ${user.meno} (${user.rola})`,'ok');
@@ -1673,9 +1733,10 @@ let activeTab=0;
 function switchTab(idx){
   // Ochrana podľa role
   const r=currentUser?.rola||'';
-  if(idx===6 && r!=='admin') return;           // Správa použ. = len admin
+  if(idx===6 && r!=='admin' && r!=='vedenie') return;  // Správa použ. = admin + vedenie
   if(r==='technik' && idx!==5) return;          // Technik = len mobil
   if(r==='operátor' && idx!==1) return;         // Operátor = len objednávky
+  if(r==='vedenie' && (idx===0||idx===5)) return; // Vedenie = bez Novej a Mobilu
   for(let i=0;i<=6;i++){
     document.getElementById('tb'+i)?.classList.toggle('active',i===idx);
     document.getElementById('page'+i)?.classList.toggle('active',i===idx);
@@ -1759,6 +1820,9 @@ function initApp(){
       '</div>';
     document.getElementById('mob-sum').textContent='Účet nedokončený';
   } else if(rola==='operátor'){
+    switchTab(1);
+    renderObjTable();
+  } else if(rola==='vedenie'){
     switchTab(1);
     renderObjTable();
   } else {
@@ -1876,12 +1940,15 @@ document.addEventListener('click',e=>{
 // DASHBOARD
 // ════════════════════════════════════════════════════════════
 function updateDash(){
-  const dnes=MOCK_OBJ.filter(o=>o.plan===T&&!o.real&&o.farba!=='zlta').length;
-  const neplan=MOCK_OBJ.filter(isNeplan).length;
-  const oneskor=MOCK_OBJ.filter(isOneskoren).length;
-  const prerez=MOCK_OBJ.filter(o=>o.farba==='modra'&&!o.real).length;
+  const src=(currentUser?.rola==='vedenie'&&vedenieSt!=='vsetky')
+    ? MOCK_OBJ.filter(o=>(o.stredisko||'zilina')===vedenieSt)
+    : MOCK_OBJ;
+  const dnes=src.filter(o=>o.plan===T&&!o.real&&o.farba!=='zlta').length;
+  const neplan=src.filter(isNeplan).length;
+  const oneskor=src.filter(isOneskoren).length;
+  const prerez=src.filter(o=>o.farba==='modra'&&!o.real).length;
   const notRead=NOTIF.filter(n=>!n.precitana).length;
-  const celkom=MOCK_OBJ.filter(o=>!o.real&&o.farba!=='zlta').length;
+  const celkom=src.filter(o=>!o.real&&o.farba!=='zlta').length;
   document.getElementById('dash-section').innerHTML=`
     <div class="dash-card c-blue" onclick="switchTab(2)"><div class="dash-val">${dnes}</div><div class="dash-lbl">Dnes na realizáciu</div></div>
     <div class="dash-card c-red" onclick="dashClickFilter('neplan')"><div class="dash-val">${neplan}</div><div class="dash-lbl">Nenaplánovaných</div></div>
@@ -2438,6 +2505,49 @@ function aiVyberKandidata(typ, balik, adresa, ltIso, isAdd, dnesIso){
   return { technik: null, plan: cielIso, prekLT: false, dovod: 'no-capacity' };
 }
 
+// ── AI TIME WINDOW ───────────────────────────────────────────
+// Nájde prvý voľný slot od rána pre technika na daný deň.
+// Sloty: pos 0=07:30, 1=09:00, 2=10:30 ... (krok 90 min, okno 2h, prekryv 30 min)
+// Možnosť B: hľadá prvú VOĽNÚ medzeru (nie len "za posledným")
+function aiTimeWindow(technik, planIso){
+  const BASE_MIN  = 7*60+30;
+  const DURATION  = 120;
+  const SLOT_STEP = 90;
+  const _parseMin = t => { const [h,m]=t.split(':').map(Number); return h*60+m; };
+  const _fmt = n => `${String(Math.floor(n/60)).padStart(2,'0')}:${String(n%60).padStart(2,'0')}`;
+
+  if(!technik||!planIso) return {cas_od:'',cas_do:''};
+
+  // Veľkosť tímu – slot pojme toľko objednávok súčasne
+  const tim = (TECHNICI_DETAIL[technik]||{}).tim_velkost || 1;
+
+  const existing=MOCK_OBJ.filter(o=>
+    o.zdroj===technik && o.plan===planIso && !o.real && o.farba!=='zlta'
+  );
+
+  if(!existing.length){
+    return {cas_od:_fmt(BASE_MIN), cas_do:_fmt(BASE_MIN+DURATION)};
+  }
+
+  // Počet objednávok na každej pozícii (option B – hľadá prvú voľnú medzeru)
+  const posCount={};
+  for(const o of existing){
+    let pos=0;
+    if(o.cas_od){
+      pos=Math.round((_parseMin(o.cas_od)-BASE_MIN)/SLOT_STEP);
+      if(pos<0) pos=0;
+    }
+    posCount[pos]=(posCount[pos]||0)+1;
+  }
+
+  // Prvý slot kde počet objednávok < tim_velkost
+  let pos=0;
+  while((posCount[pos]||0)>=tim) pos++;
+
+  const startMin=BASE_MIN+pos*SLOT_STEP;
+  return {cas_od:_fmt(startMin), cas_do:_fmt(startMin+DURATION)};
+}
+
 function aiTrigger(){
   if(aiDone)return;
   const prijatia = document.getElementById('n-prijatia').value;
@@ -2495,6 +2605,22 @@ function aiTrigger(){
     ? ` <strong style="color:#b91c1c">⚠ Daj pre-rezervovať!</strong>`
     : '';
 
+  // Časové okno – len ak AI pridelil technika a dispečérka ešte nenavrhla okno
+  let twLabel = '';
+  if(result.technik && result.plan){
+    const odEl=document.getElementById('n-cas-od');
+    const doEl=document.getElementById('n-cas-do');
+    if(odEl && !odEl.value){
+      const tw=aiTimeWindow(result.technik, result.plan);
+      odEl.value=tw.cas_od;
+      onCasOdChange('n'); // auto-vyplní cas_do (+2h)
+      if(tw.cas_od){
+        const doVal=(doEl&&doEl.value)||tw.cas_do;
+        twLabel=` · 🕐 <strong>${tw.cas_od}–${doVal}</strong>`;
+      }
+    }
+  }
+
   // Diagnostický log – pomôže identifikovať bugy s "Nový používateľ" a podobne
   console.log('[AI] návrh →', {
     typ, balik, adresa, lt, isAdd,
@@ -2515,19 +2641,19 @@ function aiTrigger(){
 
   if(result.dovod === 'ok'){
     hint.className = 'ai-hint ' + (isPreRez ? 'warn' : 'ok');
-    hint.innerHTML = `💡 AI návrh: <strong>${result.technik}</strong> | <strong>${planFmt}</strong>${regionLbl}`
+    hint.innerHTML = `💡 AI návrh: <strong>${result.technik}</strong> | <strong>${planFmt}</strong>${regionLbl}${twLabel}`
                    + ` <span style="color:#94a3b8;font-size:11px">(skóre ${result.skore})</span>`
                    + prerezHint;
   }
   else if(result.dovod === 'weiss-kvota'){
     hint.className = 'ai-hint ' + (isPreRez ? 'warn' : 'ok');
-    hint.innerHTML = `🤝 Zmluvné pravidlo: <strong>${result.technik}</strong> | <strong>${planFmt}</strong>`
+    hint.innerHTML = `🤝 Zmluvné pravidlo: <strong>${result.technik}</strong> | <strong>${planFmt}</strong>${twLabel}`
                    + ` <span style="color:#94a3b8;font-size:11px">Weiss E+O3 ${result.weissInfo}</span>`
                    + prerezHint;
   }
   else if(result.dovod === 'ok-overload'){
     hint.className = 'ai-hint warn';
-    hint.innerHTML = `⚠ AI návrh: <strong>${result.technik}</strong> | <strong>${planFmt}</strong>${regionLbl}`
+    hint.innerHTML = `⚠ AI návrh: <strong>${result.technik}</strong> | <strong>${planFmt}</strong>${regionLbl}${twLabel}`
                    + ` <span style="color:#b45309;font-size:11px">– technici sú vyťažení nad cieľovú kapacitu</span>`
                    + prerezHint;
   }
@@ -2945,6 +3071,10 @@ function renderObjTable(){
   const fpozn=normDiakr(document.getElementById('f-pozn').value||'');
 
   let rows=[...MOCK_OBJ];
+  // Filter strediska pre rolu vedenie
+  if(currentUser?.rola==='vedenie' && vedenieSt!=='vsetky'){
+    rows=rows.filter(o=>(o.stredisko||'zilina')===vedenieSt);
+  }
   // Default zoradenie: najstaršie hore, NAJNOVŠIE DOLE (chronologicky podľa prijatia).
   // Pri 10k+ riadkoch dispečérka vidí najnovšie po auto-scrolle na koniec
   // bez nutnosti listovať celý zoznam.
@@ -3056,7 +3186,9 @@ function renderObjTable(){
 function showPlan(){
   const datum=document.getElementById('p-datum').value||T;
   document.getElementById('p-datum').value=datum;
-  const rows=MOCK_OBJ.filter(o=>o.plan===datum).sort((a,b)=>(a.zdroj||'').localeCompare(b.zdroj||''));
+  const stFilter=(currentUser?.rola==='vedenie'&&vedenieSt!=='vsetky')?vedenieSt:null;
+  const src=stFilter?MOCK_OBJ.filter(o=>(o.stredisko||'zilina')===stFilter):MOCK_OBJ;
+  const rows=src.filter(o=>o.plan===datum).sort((a,b)=>(a.zdroj||'').localeCompare(b.zdroj||''));
   const tc={};rows.forEach(o=>{tc[o.zdroj||'–']=(tc[o.zdroj||'–']||0)+1;});
   const sum=`Celkom: ${rows.length}${Object.entries(tc).map(([t,n])=>` | ${t}: ${n}`).join('')}`;
   document.getElementById('p-sum').textContent=sum;
@@ -3076,9 +3208,9 @@ function showPlan(){
 let prChecked=new Set();
 function showPrerezerv(){
   prChecked.clear();
-  // Zobrazí VŠETKY prerezerv. objednávky (farba=modra) bez realizácie
-  // Podmienka plan>lt nie je povinná - stačí farba=modra (dispečér ju nastavil manuálne)
-  const rows=MOCK_OBJ.filter(o=>
+  const stFilter=(currentUser?.rola==='vedenie'&&vedenieSt!=='vsetky')?vedenieSt:null;
+  const src=stFilter?MOCK_OBJ.filter(o=>(o.stredisko||'zilina')===stFilter):MOCK_OBJ;
+  const rows=src.filter(o=>
     o.farba==='modra'&&!o.real&&o.farba!=='zlta'
   ).sort((a,b)=>(a.plan||'').localeCompare(b.plan||''));
   document.getElementById('pr-sum').textContent=`Pre-rezervácií: ${rows.length}`;
@@ -3220,7 +3352,9 @@ function emailPrerezerv(){
 // TAB 4: NENAPLÁNOVANÉ
 // ════════════════════════════════════════════════════════════
 function showNeplan(){
-  const rows=MOCK_OBJ.filter(isNeplan);
+  const stFilter=(currentUser?.rola==='vedenie'&&vedenieSt!=='vsetky')?vedenieSt:null;
+  const src=stFilter?MOCK_OBJ.filter(o=>(o.stredisko||'zilina')===stFilter):MOCK_OBJ;
+  const rows=src.filter(isNeplan);
   document.getElementById('np-sum').textContent=`Nenaplánovaných: ${rows.length}`;
   document.getElementById('np-tbody').innerHTML=rows.map(o=>`
     <tr class="tr-red" ondblclick="otvorEditModal('${o.id_obj}')">
@@ -3398,8 +3532,8 @@ let editCurrentId=null,editOrigPlan=null,editOrigRez=0,editOrigObj=null;
 function otvorEditModal(id_obj){
   const o=MOCK_OBJ.find(x=>x.id_obj===id_obj);if(!o)return;
   const rola=currentUser?.rola||'dispečér';
-  // Operátor – žiadna editácia
-  if(rola==='operátor')return;
+  // Operátor a vedenie – žiadna editácia
+  if(rola==='operátor'||rola==='vedenie')return;
   editCurrentId=id_obj;editOrigPlan=o.plan||null;
   const rm=o.pozn.match(/REZ\s*(\d{1,2})/);editOrigRez=rm?parseInt(rm[1]):0;
   // Snapshot pre diff histórie
@@ -3677,7 +3811,9 @@ function mobZapisozn(id){
 // ════════════════════════════════════════════════════════════
 // SPRÁVA POUŽÍVATEĽOV (admin)
 // ════════════════════════════════════════════════════════════
-const ROLE_OPTIONS=['admin','dispečér','technik','operátor'];
+const ROLE_OPTIONS=['admin','dispečér','technik','operátor','vedenie'];
+const STREDISKO_OPTIONS=['zilina','bratislava','trencin'];
+const STREDISKO_LABEL={'zilina':'Žilina','bratislava':'Bratislava','trencin':'Trenčín'};
 
 // ── Hierarchia Typ → povolené balíky ────────────────────────────────────────
 // Zdroj pravdy pre celý systém (admin panel skills + filter dl-balik vo formulári)
@@ -3829,6 +3965,11 @@ function renderUserTable(){
       <td>
         ${u.rola==='technik'?`<input type="text" list="dl-tech-uzers" value="${(u.technik_meno||'').replace(/"/g,'&quot;')}" onchange="updateUser(${idx},'technik_meno',this.value)" placeholder="napr. Poštulka Róbert" style="width:100%;padding:5px 8px;border:1px solid var(--border2);border-radius:5px">`:'<span style="color:var(--muted);font-size:11px">–</span>'}
       </td>
+      <td>
+        <select onchange="updateUser(${idx},'stredisko',this.value)" style="min-width:90px">
+          ${STREDISKO_OPTIONS.map(s=>`<option value="${s}"${s===u.stredisko?' selected':''}>${STREDISKO_LABEL[s]||s}</option>`).join('')}
+        </select>
+      </td>
       <td><button class="btn btn-red btn-xs" onclick="vymazUser(${idx})" title="Vymazať"${u.email===currentUser?.email?' disabled style="opacity:.4;cursor:not-allowed"':''}>🗑</button></td>
     </tr>
     ${(u.rola==='admin'||u.rola==='dispečér')?`
@@ -3951,7 +4092,7 @@ function updateUser(idx,field,val){
   }
   const u=DEMO_USERS[idx];
   if(!u._id){console.warn('updateUser: _id chýba pre idx',idx);return;}
-  const rolaApiMap={'operátor':'operator','dispečér':'dispecer','admin':'admin','technik':'technik'};
+  const rolaApiMap={'operátor':'operator','dispečér':'dispecer','admin':'admin','technik':'technik','vedenie':'vedenie'};
   const payload={};
   if(field==='heslo')      payload['heslo']=val;
   else if(field==='rola')  payload['rola']=rolaApiMap[val]||val;
@@ -3972,7 +4113,7 @@ function updateUser(idx,field,val){
     DEMO_USERS[idx][field]=s;
     payload[field]=s;
   }
-  else if(['meno','email','technik_meno','ini','imap_server','imap_email','imap_heslo','skills_typy','skills_baliky','technik_email'].includes(field))
+  else if(['meno','email','technik_meno','ini','imap_server','imap_email','imap_heslo','skills_typy','skills_baliky','technik_email','stredisko'].includes(field))
     payload[field]=val;
   else if(field==='technik_email_notify'){
     const iv=(val===1||val==='1'||val===true)?1:0;
@@ -4013,15 +4154,19 @@ function updateUser(idx,field,val){
 }
 
 function pridajUsera(){
-  const novy={email:'novy@suptel.sk',heslo:'Heslo123!',meno:'Nový používateľ',rola:'operátor',ini:'NP',technik_meno:'',imap_server:'posta.suptel.cz',imap_email:'',imap_heslo:'',skills_typy:'',skills_baliky:'',tim_velkost:1,na_dovolenke:0,dovolenka_od:'',dovolenka_do:''};
+  const stredisko=currentUser?.stredisko||'zilina';
+  const STREDISKO_SHORT={'zilina':'ZA','bratislava':'BA','trencin':'TN'};
+  const short=STREDISKO_SHORT[stredisko]||stredisko.toUpperCase();
+  const uid=Date.now().toString(36);
+  const novy={email:`novy_${uid}@suptel.sk`,heslo:'Heslo123!',meno:`Nový ${short}`,rola:'operátor',ini:'NP',technik_meno:'',imap_server:'posta.suptel.cz',imap_email:'',imap_heslo:'',skills_typy:'',skills_baliky:'',tim_velkost:1,na_dovolenke:0,dovolenka_od:'',dovolenka_do:'',stredisko};
   // Vytvor na API
-  const rolaApiMap={'operátor':'operator','dispečér':'dispecer','admin':'admin','technik':'technik'};
+  const rolaApiMap={'operátor':'operator','dispečér':'dispecer','admin':'admin','technik':'technik','vedenie':'vedenie'};
   api('POST','/api/users',{
     email:novy.email, meno:novy.meno, heslo:novy.heslo,
     rola:rolaApiMap[novy.rola]||novy.rola,
     technik_meno:'', ini:'NP', imap_server:'posta.suptel.cz', imap_email:'', imap_heslo:'',
     skills_typy:'', skills_baliky:'', tim_velkost:1,
-    na_dovolenke:0, dovolenka_od:'', dovolenka_do:''
+    na_dovolenke:0, dovolenka_od:'', dovolenka_do:'', stredisko
   }).then(async r=>{
     novy._id=r.id;
     DEMO_USERS.push(novy);
@@ -4661,10 +4806,12 @@ async function zobrazHistoriu(id_obj){
 // ZMENA 4+5: MESAČNÝ VÝKAZ + ŠTATISTIKY (záložka Nenaplánované → tlačidlá)
 // ════════════════════════════════════════════════════════════
 function exportMesacnyVykaz(){
-  // Technici – 4 zdroje (rovnako ako fillMobTechnik) aby sme videli VŠETKÝCH evidovaných
-  const fromUsers=(DEMO_USERS||[]).filter(u=>u.rola==='technik').map(u=>u.technik_meno||u.meno).filter(Boolean);
-  const fromMockAll=[...new Set(MOCK_OBJ.map(o=>o.zdroj).filter(Boolean))];
-  const all=[...new Set([...(TECHNICI||[]),...fromUsers,...fromMockAll])].sort();
+  // Technici – filtruj podľa strediska pre vedenie
+  const stFilter=(currentUser?.rola==='vedenie'&&vedenieSt!=='vsetky')?vedenieSt:null;
+  const fromUsers=(DEMO_USERS||[]).filter(u=>u.rola==='technik'&&(!stFilter||(u.stredisko||'zilina')===stFilter)).map(u=>u.technik_meno||u.meno).filter(Boolean);
+  const srcData=stFilter?MOCK_OBJ.filter(o=>(o.stredisko||'zilina')===stFilter):MOCK_OBJ;
+  const fromMockAll=[...new Set(srcData.map(o=>o.zdroj).filter(Boolean))];
+  const all=[...new Set([...(stFilter?[]:TECHNICI||[]),...fromUsers,...fromMockAll])].sort();
   const techHTML='<option value="">– Všetci technici –</option>'+all.map(t=>`<option>${t}</option>`).join('');
   // Roky – dynamicky z dostupných objednávok + aktuálny rok pre istotu
   const aktRok=String(new Date().getFullYear());
@@ -4689,7 +4836,7 @@ function exportMesacnyVykaz(){
     const t=document.getElementById('mv-tech').value;
     const r=document.getElementById('mv-rok').value;
     const m=document.getElementById('mv-mes').value;
-    const cnt=MOCK_OBJ.filter(o=>{
+    const cnt=srcData.filter(o=>{
       const d=(o.plan||o.prijatia||'');
       if(d.slice(0,4)!==r) return false;
       if(d.slice(5,7)!==m) return false;
@@ -4912,9 +5059,15 @@ function zobrazStatistiky(){
   const mesiaceL=['Január','Február','Marec','Apríl','Máj','Jún','Júl','August','September','Október','November','December'];
   const optMes=['<option value="">– všetky –</option>',...mesiaceL.map((m,i)=>`<option value="${String(i+1).padStart(2,'0')}">${m}</option>`)].join('');
 
+  // Filtrovanie pre vedenie podľa vybraného strediska
+  const stFilter = (currentUser?.rola==='vedenie' && vedenieSt!=='vsetky') ? vedenieSt : null;
+  const STREDISKO_LABEL={'zilina':'Žilina','bratislava':'Bratislava','trencin':'Trenčín'};
+  const stLabel = stFilter ? `SUPTEL ${(STREDISKO_LABEL[stFilter]||stFilter).toUpperCase()}` : (STREDISKO_LABEL[currentUser?.stredisko]?`SUPTEL ${STREDISKO_LABEL[currentUser.stredisko].toUpperCase()}`:'SUPTEL');
+
   // Dáta inline – cez window.opener nefunguje (browser security).
   // Posielame len fields ktoré stats potrebujú – kompaktnejšie ako celé objekty.
-  const slimData=MOCK_OBJ.map(o=>({
+  const srcData = stFilter ? MOCK_OBJ.filter(o=>(o.stredisko||'zilina')===stFilter) : MOCK_OBJ;
+  const slimData=srcData.map(o=>({
     p:o.prijatia||'', r:o.real||'', f:o.farba||'', z:o.zdroj||'', a:o.add_txt||''
   }));
   const dataJSON=JSON.stringify(slimData);
@@ -4935,7 +5088,7 @@ function zobrazStatistiky(){
   tr:nth-child(even){background:#f5f5f5}
   .empty{padding:30px;text-align:center;color:#888;font-style:italic}</style></head>
   <body>
-  <h2>📊 Štatistiky DISPECING – SUPTEL ŽILINA</h2>
+  <h2>📊 Štatistiky DISPECING – ${stLabel}</h2>
   <div class="filterbar">
     <label>Rok:</label>
     <select id="f-rok" onchange="render()">${optRoky}</select>
@@ -5126,5 +5279,43 @@ document.addEventListener('keydown',e=>{
     return;
   }
 });
+// ════════════════════════════════════════════════════════════
+// AUTO VERSION CHECK – pri zmene index.html na serveri auto-reload
+// Používa HEAD request (cache: no-store) a porovnáva ETag / Last-Modified
+// ════════════════════════════════════════════════════════════
+let _versionEtag = null;
+let _versionReloadPending = false;
+
+async function checkPageVersion() {
+  if (_versionReloadPending) return;
+  try {
+    const r = await fetch(location.href, { method: 'HEAD', cache: 'no-store' });
+    const etag = r.headers.get('ETag') || r.headers.get('Last-Modified') || null;
+    if (!etag) return; // server nepodporuje ETag – nič nerob
+    if (_versionEtag === null) {
+      _versionEtag = etag; // prvé načítanie – ulož referenciu
+      return;
+    }
+    if (etag !== _versionEtag) {
+      _versionReloadPending = true;
+      _versionEtag = etag;
+      // Toast s odpočítavaním
+      let sec = 10;
+      const id = setInterval(() => {
+        sec--;
+        toast(`🔄 Dostupná nová verzia DISPECING – obnova za ${sec}s`, 'info');
+        if (sec <= 0) {
+          clearInterval(id);
+          location.reload(true);
+        }
+      }, 1000);
+      toast(`🔄 Dostupná nová verzia DISPECING – obnova za ${sec}s`, 'info');
+    }
+  } catch (e) { /* sieť nedostupná – preskočiť */ }
+}
+
+// Prvá kontrola 10s po načítaní stránky, potom každých 5 minút
+setTimeout(checkPageVersion, 10_000);
+setInterval(checkPageVersion, 5 * 60 * 1000);
 </script>
 </body></html>
