@@ -1352,7 +1352,12 @@ function patchObj(id, payload, opts){
                      // aj keby sa premenná v callerovi medzitým zmenila
   return api('PATCH', `/api/objednavky/${_pid}`, payload)
     .catch(silent ? ()=>{} : e => toast('⚠ API chyba: '+e.message))
-    .finally(() => _pendingPatches.delete(_pid));
+    .finally(() => {
+      // Buffer 2s pred uvoľnením guardu: chráni pred in-flight polling GET
+      // response, ktorý mohol byť spustený PRED alebo POČAS PATCH-u a doraziť AŽ PO
+      // .finally() – bez tohto guardu by prepísal MOCK_OBJ so starými dátami.
+      setTimeout(() => _pendingPatches.delete(_pid), 2000);
+    });
 }
 
 // Notifikácie (technikmi zmenené objednávky)
@@ -3321,7 +3326,9 @@ function zapisObjednavku(){
     telefon:document.getElementById('n-telefon').value.trim(),
     kod_aktivity:document.getElementById('n-kod').value.trim(),
     region:(document.getElementById('n-region')?.value||'').trim().toUpperCase(),
-    zmeneny:now8(), cas_od:nCasOd, cas_do:nCasDo,
+    // Klientský timestamp pre správne triedenie v renderRecent() ihneď po zápise.
+    // Backend prepíše presnú hodnotu pri najbližšom polling GET.
+    zmeneny:now8(), vytvoreny:now8(), cas_od:nCasOd, cas_do:nCasDo,
   };
   // Upozornenie na prekrývajúce sa časové okno
   if(nCasOd&&novyZaznam.zdroj&&novyZaznam.plan){
@@ -3361,7 +3368,7 @@ function zapisObjednavku(){
     const _pid = idObj;
     api('PATCH', `/api/objednavky/${_pid}`, apiData)
       .catch(e => { toast('⚠ API chyba: '+e.message); setStatus('Chyba uloženia','err'); })
-      .finally(() => _pendingPatches.delete(_pid));
+      .finally(() => setTimeout(() => _pendingPatches.delete(_pid), 2000));
   } else {
     api('POST', '/api/objednavky', apiData)
       .catch(e => { toast('⚠ API chyba: '+e.message); setStatus('Chyba uloženia','err'); });
@@ -6023,7 +6030,13 @@ async function checkPageVersion() {
   } catch (e) { /* sieť nedostupná */ }
 }
 
-setTimeout(checkPageVersion, 30_000);          // prvá kontrola po 30s
-setInterval(checkPageVersion, 15 * 60 * 1000); // každých 15 minút
+// Detekcia novej verzie stránky VYPNUTÁ (júl 2026).
+// Dôvod: GitHub Pages beží na Fastly CDN s viacerými edge nodes. Aj pre ten istý
+// súbor môžu rôzne edge nodes vracať iný ETag/Last-Modified pri každom HEAD requeste.
+// To spôsobovalo falošné banner upozornenia „Je dostupná nová verzia" aj bez zmeny.
+// Funkcia checkPageVersion() ostáva v kóde pre budúce zapnutie s deterministickým
+// mechanizmom (napr. <meta name="app-version"> alebo /version.txt).
+// setTimeout(checkPageVersion, 30_000);
+// setInterval(checkPageVersion, 15 * 60 * 1000);
 </script>
 </body></html>
